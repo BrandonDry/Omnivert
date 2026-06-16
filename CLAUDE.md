@@ -81,8 +81,17 @@ $env:PIP_CACHE_DIR="$PWD\.pip-cache"; ..\.venv\Scripts\python.exe -m pip wheel -
   `Setup.exe`; conversion engine updates are bundled into new app releases.
 - The app still checks PyPI/GitHub for newer conversion engine versions in frozen mode,
   but it disables direct engine apply and tells users to install the next Omnivert release.
-- GitHub automation watches PyPI for a newer conversion engine, pins it, runs smoke checks,
-  and tags a new Omnivert release only after checks pass.
+- GitHub automation watches PyPI for a newer **stable** conversion engine (pre-releases are
+  skipped), pins it, runs smoke checks, then builds a **draft** GitHub Release. Users are only
+  prompted once a maintainer clicks **Publish** on the draft — that publish is the human
+  approval gate (no paid review tooling; the private repo can't use Environments/GHAS for free).
+- App update checks run at launch **and** re-run in-session (~24h timer + on window focus,
+  throttled to once/hour), so a long-running window learns about a release without a restart.
+  `auto_check_updates` and `skipped_app_version` still gate/suppress prompts.
+- Release notes embed the bundled MarkItDown changelog (`scripts/compose_release_notes.py`),
+  and the in-app update dialog shows the bundled "engine X → Y" delta.
+- `tests/engine_smoke.py` (the auto-bump gate) covers txt/csv/html **and** pdf/docx/pptx/xlsx,
+  with fixtures generated in-process (no committed binaries — avoids Proton dehydration).
 
 ## Handoff
 
@@ -157,8 +166,15 @@ Current handoff as of June 16, 2026:
 - **Published to GitHub (June 16, 2026):** initial commit on `main` of `BrandonDry/Omnivert`
   (private), plus Release **v0.1.0** with `Omnivert-Setup-0.1.0.exe` attached
   (https://github.com/BrandonDry/Omnivert/releases/tag/v0.1.0). The repo's branch is `main`.
-- **`.github/workflows/` NOT yet pushed:** the `gh` OAuth token only has `gist, read:org, repo`
-  (no `workflow`), so GitHub rejected the workflow files. They are committed-out but still on
-  disk. To enable CI: `gh auth refresh -h github.com -s workflow`, then
-  `git add .github/workflows && git commit && git push`. The release/engine-automation CI run is
-  the only remaining unvalidated item.
+- **CI workflows are live (corrected June 16, 2026).** The earlier "workflows not pushed / no
+  `workflow` scope" note is **stale**: the `gh` token now has `workflow`, all three workflows
+  (`release.yml`, `engine-watch.yml`, `engine-update.yml`) are `active` on `BrandonDry/Omnivert`,
+  and `v0.1.0` is released with `Omnivert-Setup-0.1.0.exe`. The only unvalidated item is a real
+  end-to-end CI run of the engine-bump → draft-release chain (no markitdown bump has occurred
+  since; PyPI `0.1.6` == the pin).
+- **Update-pipeline hardening (June 16, 2026).** `engine-update.yml` → `release.yml` now builds
+  a **draft** release (maintainer Publish = approval gate); `scripts/check_latest_engine.py`
+  uses `packaging.version` and skips pre-releases; `engine-watch.yml` installs `packaging` and
+  skips dispatch when a `bot/conversion-engine-v<ver>` PR is already open; `release.yml` composes
+  notes via `scripts/compose_release_notes.py`; `engine_smoke.py` covers binary formats; the
+  frontend re-checks for updates in-session and shows the bundled engine delta.
