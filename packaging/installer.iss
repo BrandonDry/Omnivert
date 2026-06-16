@@ -22,6 +22,7 @@ PrivilegesRequired=lowest
 CloseApplications=yes
 RestartApplications=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
+SetupIconFile=omnivert.ico
 LicenseFile=..\LICENSE
 
 [Languages]

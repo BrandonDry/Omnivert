@@ -1,0 +1,19 @@
+{
+  "name": "Omnivert",
+  "short_name": "Omnivert",
+  "description": "Convert files, URLs, and text into clean Markdown for LLMs.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1030",
+  "theme_color": "#863bff",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/apple-touch-icon.png", "type": "image/png", "sizes": "180x180" },
+    {
+      "src": "/logo-maskable-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ]
+}

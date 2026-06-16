@@ -7,6 +7,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy
 ROOT = Path(SPECPATH).parent
 SRC = ROOT / "src"
 WEB = SRC / "omnivert" / "web"
+ICON = ROOT / "packaging" / "omnivert.ico"  # exe/window/taskbar icon
 
 
 def safe_collect_data_files(package):
@@ -112,6 +113,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
+    icon=str(ICON) if ICON.exists() else None,
 )
 
 coll = COLLECT(

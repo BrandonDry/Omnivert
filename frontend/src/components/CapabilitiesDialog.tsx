@@ -112,7 +112,11 @@ export function CapabilitiesDialog({
           </div>
         )}
 
-        <p className="mt-2 border-t pt-3 text-xs text-muted-foreground">
+        <div className="mt-2 flex items-center gap-2 border-t pt-3">
+          <img src="/favicon.svg" alt="" className="size-5" />
+          <span className="text-sm font-medium">Omnivert</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
           Conversion is powered by Microsoft{" "}
           <a
             href="https://github.com/microsoft/markitdown"
