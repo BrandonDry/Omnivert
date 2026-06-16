@@ -8,7 +8,7 @@ in this repository.
 Omnivert is a Windows desktop GUI for a bundled conversion engine. The app
 uses a FastAPI backend, a React/Vite frontend, and pywebview for the native desktop
 window. The packaged Windows distribution is a PyInstaller onedir build wrapped by an
-Inno Setup `Setup.exe`. The current private GitHub release repo is `BrandonDry/Omnivert`.
+Inno Setup `Setup.exe`. The GitHub release repo is `BrandonDry/Omnivert`.
 
 ## Environment
 
@@ -84,97 +84,71 @@ $env:PIP_CACHE_DIR="$PWD\.pip-cache"; ..\.venv\Scripts\python.exe -m pip wheel -
 - GitHub automation watches PyPI for a newer **stable** conversion engine (pre-releases are
   skipped), pins it, runs smoke checks, then builds a **draft** GitHub Release. Users are only
   prompted once a maintainer clicks **Publish** on the draft — that publish is the human
-  approval gate (no paid review tooling; the private repo can't use Environments/GHAS for free).
+  approval gate.
 - App update checks run at launch **and** re-run in-session (~24h timer + on window focus,
   throttled to once/hour), so a long-running window learns about a release without a restart.
   `auto_check_updates` and `skipped_app_version` still gate/suppress prompts.
 - Release notes embed the bundled MarkItDown changelog (`scripts/compose_release_notes.py`),
   and the in-app update dialog shows the bundled "engine X → Y" delta.
 - `tests/engine_smoke.py` (the auto-bump gate) covers txt/csv/html **and** pdf/docx/pptx/xlsx,
-  with fixtures generated in-process (no committed binaries — avoids Proton dehydration).
+  with fixtures generated in-process (no committed binaries).
 
 ## Handoff
 
-Read `PHASES.md` for the detailed phase history, current status, kickoff lines, and the
-latest Phase 8 verification record.
+Read `PHASES.md` for the detailed phase history, current status, and kickoff lines.
 
-Current handoff as of June 16, 2026:
+### Naming conventions
 
-- The app rename is mostly complete. The source package, distribution name, console script,
-  frontend surfaces, docs, scripts, workflows, PyInstaller/Inno metadata, settings path, temp
-  prefixes, and installer asset names use Omnivert. Keep `markitdown` / `MarkItDown` only where
-  it is the upstream Microsoft conversion engine package/API, usually imported as
+- The source package, distribution name, console script, frontend surfaces, docs, scripts,
+  workflows, PyInstaller/Inno metadata, settings path, and installer asset names use
+  **Omnivert**. Keep `markitdown` / `MarkItDown` only where it refers to the upstream
+  Microsoft conversion engine package/API, usually imported as
   `from markitdown import MarkItDown as Engine`.
-- The app folder has been renamed to `omnivert-app`, and the outer wrapper folder has now been
-  renamed to `Omnivert` (done June 16, 2026 by the user). The live workspace is rooted at
-  `D:\Proton Drive\My files\Documents\AI Projects\Omnivert`. The full rename is complete; no
-  stale `Microsoft Markitdown` path references remain in the docs.
-- **Rename side effect fixed (June 16, 2026):** the `.venv` was repaired *in place* while the
-  workspace was still named `Microsoft Markitdown`, so uv baked that old absolute path into
-  every console-script `.exe` trampoline (`markitdown.exe`, `pip.exe`, `uvicorn.exe`, etc.) and
-  the `.py` script shebangs. After the folder rename those shims failed with
-  `uv trampoline failed to canonicalize script path` (the app itself was unaffected — it launches
-  via `python -m omnivert` / `python -m uvicorn`, and `python.exe`/`pythonw.exe` are venv
-  launchers, not uv trampolines). Fixed by re-running the documented curated reinstall from the
-  new path (regenerates all trampolines/shebangs), then re-pinning `pydantic<2.14`. Verified:
-  `markitdown.exe`, `pip.exe`, `uvicorn.exe` work and a CSV→Markdown convert succeeds; no
-  `Microsoft Markitdown` strings remain anywhere in `.venv`. `fastapi.exe` "fails" only because
-  the optional `fastapi[standard]` extra isn't installed (expected — the app uses
-  `uvicorn[standard]`, not the fastapi CLI). **Lesson: if the venv is ever repaired/created at one
-  path and the folder is later renamed/moved, re-run the reinstall to rebuild the trampolines.**
-- Post-rename static scans passed for stale app identifiers:
-  `markitdown-app`, `MarkItDown Studio`, `MarkItDownStudio`, `markitdown_studio`,
-  `markitdown-studio`, `check_latest_markitdown`, `pin_markitdown_version`, and
-  `markitdown_version`.
-- Local checks that passed after the rename: `python -m compileall src`,
-  `npm run lint --prefix frontend`, `npm run build --prefix frontend`, and
-  `python scripts/copy_web_assets.py`. Git ignore coverage includes `frontend/node_modules`,
-  `frontend/dist`, `src/omnivert/web`, `build`, `dist`, `.pip-cache`, `.uv-cache`, and egg-info.
-- **Venv repaired (June 16, 2026).** The corruption was caused by Proton Drive dehydrating files
-  into cloud placeholders (this workspace lives inside Proton Drive). Repaired in place — no
-  second env — with
-  `uv pip install --python .venv\Scripts\python.exe --prerelease=allow --reinstall pip fastapi "uvicorn[standard]" python-multipart trio pywebview "markitdown[pptx,docx,xlsx,xls,pdf,outlook,az-doc-intel,az-content-understanding,audio-transcription]==0.1.6"`,
-  then `uv pip install --python .venv\Scripts\python.exe "pydantic<2.14"` to undo the pydantic
-  alpha that `--prerelease=allow` (required only by `azure-ai-contentunderstanding>=1.2.0b1`)
-  had pulled in. `pip`, `trio`, and the engine all import cleanly afterward.
-- **Full Phase 8 smoke pass (June 16, 2026)** after the repair: `python -m compileall src`,
-  `omnivert.main`/`omnivert.launcher` imports, `tests/engine_smoke.py`, Uvicorn boot,
-  `/api/health`, `/api/app/version`, `/api/capabilities`, `/api/plugins`, `/api/convert/text`,
-  multipart `/api/convert/file`, frontend lint + build, `scripts/copy_web_assets.py`, and a
-  clean wheel (28 entries, 0 `markitdown_studio` entries, only current `omnivert/web` assets).
-- **Wheel build note:** clean the ignored `build\` cache and any stale `dist\markitdown_studio-*.whl`
-  first, then use the documented `pip wheel --no-deps --no-build-isolation . -w dist\wheel-check`.
-  Proton may hold a placeholder lock on a previously-built `dist\wheel-check\*.whl` (access
-  denied to delete); build into a fresh dir (e.g. `dist\wheel-verify\`) and delete the stale one
-  manually once Proton releases it. Both dirs are gitignored.
-- **Windows build chain validated (June 16, 2026).** PyInstaller freeze →
-  `dist\Omnivert\Omnivert.exe`; Inno Setup 6 compile → `dist\installer\Omnivert-Setup-0.1.0.exe`;
-  silent install (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) →
-  `%LOCALAPPDATA%\Programs\Omnivert\Omnivert.exe` + Start-Menu shortcut; installed app boots,
-  serves `/api`, reports `frozen:true` + `engine_version:0.1.6`, and converts a CSV to a
-  Markdown table. Two `packaging/app.spec` fixes were needed (now in place): (1) `ROOT` was off
-  by one level (`Path(SPECPATH).parent.parent` → `.parent`) — the extra `.parent` pointed at the
-  outer `Omnivert\` wrapper and broke the freeze with "freeze_entry.py not found"; (2) added
-  `copy_metadata("markitdown", recursive=True)` + an explicit `copy_metadata` list for the
-  `_OPTIONAL_DEPS` in `capabilities.py` so `importlib.metadata.version(...)` works frozen and the
-  Capabilities dialog shows engine/dep versions. Inno Setup installed via
-  `winget install --id JRSoftware.InnoSetup` (ISCC landed at
-  `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`, not Program Files).
-- **Update-over-install validated (June 16, 2026):** a 0.1.1 installer run silently over the
-  installed 0.1.0 upgraded **in place** (Windows Uninstall version 0.1.0 → 0.1.1, single entry,
-  no side-by-side); upgraded app booted + converted. Repo reverted to 0.1.0 afterward.
-- **Published to GitHub (June 16, 2026):** initial commit on `main` of `BrandonDry/Omnivert`
-  (private), plus Release **v0.1.0** with `Omnivert-Setup-0.1.0.exe` attached
-  (https://github.com/BrandonDry/Omnivert/releases/tag/v0.1.0). The repo's branch is `main`.
-- **CI workflows are live (corrected June 16, 2026).** The earlier "workflows not pushed / no
-  `workflow` scope" note is **stale**: the `gh` token now has `workflow`, all three workflows
-  (`release.yml`, `engine-watch.yml`, `engine-update.yml`) are `active` on `BrandonDry/Omnivert`,
-  and `v0.1.0` is released with `Omnivert-Setup-0.1.0.exe`. The only unvalidated item is a real
-  end-to-end CI run of the engine-bump → draft-release chain (no markitdown bump has occurred
-  since; PyPI `0.1.6` == the pin).
-- **Update-pipeline hardening (June 16, 2026).** `engine-update.yml` → `release.yml` now builds
-  a **draft** release (maintainer Publish = approval gate); `scripts/check_latest_engine.py`
-  uses `packaging.version` and skips pre-releases; `engine-watch.yml` installs `packaging` and
-  skips dispatch when a `bot/conversion-engine-v<ver>` PR is already open; `release.yml` composes
-  notes via `scripts/compose_release_notes.py`; `engine_smoke.py` covers binary formats; the
-  frontend re-checks for updates in-session and shows the bundled engine delta.
+
+### Build / packaging gotchas (durable)
+
+- **Curated engine extras only.** The conversion engine is pinned in `pyproject.toml` with a
+  curated extras list, **not** `markitdown[all]` (the YouTube extra has Python-version
+  caveats). If you need to repair/reinstall the environment, reinstall the same curated
+  extras pin. `azure-ai-contentunderstanding` may pull a pydantic pre-release if prereleases
+  are allowed — pin `pydantic<2.14` back to stable afterward.
+- **`packaging/app.spec` — two fixes are in place; don't regress them:**
+  1. `ROOT` is `Path(SPECPATH).parent` (the spec lives in `packaging/`, so its parent is the
+     repo root). An extra `.parent` climbs out of the repo and breaks the freeze with
+     *"script freeze_entry.py not found"*.
+  2. The spec calls `copy_metadata("markitdown", recursive=True)` plus an explicit
+     `copy_metadata` list for the optional deps in `_OPTIONAL_DEPS`
+     (`src/omnivert/capabilities.py`). Without this, frozen builds return `None` from
+     `importlib.metadata.version(...)` and the Capabilities dialog shows no versions. Keep
+     the two lists in sync.
+- **Wheel build:** clean the ignored `build\` cache first, then use
+  `pip wheel --no-deps --no-build-isolation . -w dist\wheel-check`
+  (with a repo-local `PIP_CACHE_DIR`). Prefer this over `python -m build` when a generated
+  `build\` directory exists.
+- **Inno Setup** is provided by `JRSoftware.InnoSetup` (`ISCC.exe`). Per-user installs may
+  land it under `%LOCALAPPDATA%\Programs\Inno Setup 6\`, not `Program Files`.
+
+### Validated build/release chain
+
+The Windows build chain has been validated end-to-end: PyInstaller freeze →
+`dist\Omnivert\Omnivert.exe`; Inno Setup compile → `dist\installer\Omnivert-Setup-<ver>.exe`;
+silent per-user install (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) →
+`%LOCALAPPDATA%\Programs\Omnivert\`; installed app boots, serves `/api`, reports
+`frozen:true`, and converts files. Update-over-install upgrades in place (single Uninstall
+entry, no side-by-side). All three workflows (`release.yml`, `engine-watch.yml`,
+`engine-update.yml`) are active on `BrandonDry/Omnivert`.
+
+### Update-pipeline notes
+
+`engine-update.yml` → `release.yml` builds a **draft** release (maintainer Publish = the
+approval gate); `scripts/check_latest_engine.py` uses `packaging.version` and skips
+pre-releases; `engine-watch.yml` skips dispatch when a `bot/conversion-engine-v<ver>` PR is
+already open; `release.yml` composes notes via `scripts/compose_release_notes.py`; the
+frontend re-checks for updates in-session and shows the bundled engine delta.
+
+### Environment caveat
+
+If Python imports start failing for files that clearly exist (missing submodules, broken
+console-script trampolines), suspect a file-sync/placeholder layer (e.g. cloud-synced
+folders that dehydrate files on disk) and reinstall the curated dependencies before
+debugging further.

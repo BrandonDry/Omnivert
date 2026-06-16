@@ -183,7 +183,7 @@ omnivert-app/
 - **Follow-up fix:** pywebview can ignore browser-style blob downloads, so individual `.md`
   saves and batch downloads now use native save dialogs via `/api/save-markdown` and
   `/api/save-download/{batch_id}` when `GET /api/native` reports desktop dialogs are available.
-- **Verified:** Proton `# Name clash` filenames were restored to canonical paths first; frontend
+- **Verified:** frontend
   type-check, frontend lint, production build, backend compile/import, `/api/health`,
   `/api/plugins`, and a simple `/api/convert/text` smoke check passed. Vite still emits the known
   non-blocking >500 kB chunk warning, and backend import still surfaces the documented missing
@@ -205,10 +205,8 @@ omnivert-app/
   Static scans are clean for stale app identifiers (`markitdown-app`, `MarkItDown Studio`,
   `MarkItDownStudio`, `markitdown_studio`, `markitdown-studio`, old helper script names, and
   `markitdown_version`). Remaining `markitdown` / `MarkItDown` references should be upstream
-  engine package/API references only. The app folder is now `omnivert-app`, and the outer
-  wrapper folder has now been renamed to `Omnivert` (done June 16, 2026). The rename is
-  complete; the workspace root is
-  `D:\Proton Drive\My files\Documents\AI Projects\Omnivert`.
+  engine package/API references only. The app folder is `omnivert-app` (the GitHub repo root).
+  The rename is complete.
 - **Verified locally on June 15, 2026:** backend `compileall`; package imports
   (`omnivert.main`, `omnivert.launcher`); representative text conversions
   via `tests/engine_smoke.py`; Uvicorn boot on `127.0.0.1:8765`; `/api/health`,
@@ -219,27 +217,18 @@ omnivert-app/
 - **Verified locally on June 16, 2026 after rename:** `python -m compileall src`,
   frontend lint, frontend production build, package web asset copy, stale app-identifier scan,
   and git-ignore coverage for generated/dependency folders.
-- **Venv repaired + full smoke pass on June 16, 2026:** root cause of the corruption was that
-  this entire workspace lives inside **Proton Drive**, which dehydrates files into cloud
-  placeholders (`FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS`) — that is why module files went missing
-  (`pip._internal.utils.base`, `trio`, `markitdown.converter_utils._base_converter`). Repaired
-  in place (no second env) with
-  `uv pip install --python .venv\Scripts\python.exe --prerelease=allow --reinstall pip <app deps> markitdown[...curated extras...]==0.1.6`,
-  then pinned `pydantic<2.14` back to stable (the global `--prerelease=allow`, needed only for
-  `azure-ai-contentunderstanding>=1.2.0b1`, had pulled a pydantic alpha). After repair the full
-  Phase 8 plan passed: `python -m compileall src`; `import omnivert.main, omnivert.launcher`;
+- **Full smoke pass on June 16, 2026:** `python -m compileall src`;
+  `import omnivert.main, omnivert.launcher`;
   `tests/engine_smoke.py` (exit 0); Uvicorn boot on `127.0.0.1:8765`; `/api/health`,
   `/api/app/version`, `/api/capabilities`, `/api/plugins`, `/api/convert/text`, and multipart
   `/api/convert/file` (CSV→Markdown table); frontend lint + production build;
-  `scripts/copy_web_assets.py`; and a clean wheel build.
-- **Wheel verified:** cleaned ignored `build\` and the stale `dist\markitdown_studio-*.whl`,
-  rebuilt the wheel via the documented `pip wheel --no-deps --no-build-isolation` (output in
-  `dist\wheel-verify\` because Proton holds a stale placeholder lock on
-  `dist\wheel-check\omnivert-0.1.0-py3-none-any.whl`). The new `omnivert-0.1.0-py3-none-any.whl`
-  has **28 entries, 0 `markitdown_studio` entries**, and contains only current `omnivert/web`
-  assets plus the `omnivert` package + `dist-info`. The Proton-locked stale
-  `dist\wheel-check\` placeholder needs a manual delete once Proton releases it (both dirs are
-  gitignored).
+  `scripts/copy_web_assets.py`; and a clean wheel build. (If module files ever go missing in a
+  cloud-synced working folder, reinstall the curated engine extras pin and re-pin
+  `pydantic<2.14` to stable — see CLAUDE.md "Environment caveat".)
+- **Wheel verified:** cleaned the ignored `build\` cache, rebuilt the wheel via the documented
+  `pip wheel --no-deps --no-build-isolation`. The `omnivert-0.1.0-py3-none-any.whl`
+  has **28 entries, 0 stale entries**, and contains only current `omnivert/web`
+  assets plus the `omnivert` package + `dist-info`.
 - **Notes:** The missing `ffmpeg` warning is still expected for audio-related imports. Vite
   still emits the known non-blocking >500 kB chunk warning. `python -m build --wheel` is not
   the preferred local check when a generated `build\` directory exists; use the documented

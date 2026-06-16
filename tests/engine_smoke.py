@@ -7,8 +7,7 @@ text formats.
 
 Fixtures are generated in-process rather than committed. That keeps the suite hermetic (no
 generation libraries needed at run time beyond what the engine extras already pull in) and
-avoids committing binary blobs into this Proton-Drive-backed workspace, where dehydration into
-cloud placeholders has corrupted files before (see CLAUDE.md).
+avoids committing binary blobs into the repository.
 """
 
 from __future__ import annotations
