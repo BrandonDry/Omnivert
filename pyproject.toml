@@ -11,6 +11,31 @@ requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]
 authors = [{ name = "BrandonDry" }]
+keywords = [
+  "markdown",
+  "converter",
+  "document-conversion",
+  "markitdown",
+  "pdf",
+  "docx",
+  "pptx",
+  "xlsx",
+  "desktop",
+  "gui",
+  "llm",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Win32 (MS Windows)",
+  "Intended Audience :: End Users/Desktop",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Text Processing :: Markup :: Markdown",
+  "Topic :: Utilities",
+]
 dependencies = [
   "fastapi",
   "uvicorn[standard]",
@@ -28,6 +53,12 @@ build = [
 test = [
   "pytest",
 ]
+
+[project.urls]
+Homepage = "https://github.com/BrandonDry/Omnivert"
+Repository = "https://github.com/BrandonDry/Omnivert"
+Issues = "https://github.com/BrandonDry/Omnivert/issues"
+Changelog = "https://github.com/BrandonDry/Omnivert/blob/main/CHANGELOG.md"
 
 [project.scripts]
 omnivert = "omnivert.launcher:main"

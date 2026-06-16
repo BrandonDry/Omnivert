@@ -6,7 +6,7 @@ Release repository: `BrandonDry/Omnivert`.
 
 1. Bump `src/omnivert/app_version.py`.
 2. Confirm `src/omnivert/build_info.py` points at `BrandonDry/Omnivert` for the
-   private release repo.
+   release repo.
 3. Run the local checks from `README.md` at least through frontend build, web asset copy,
    backend smoke, and wheel build.
 4. Commit the change.
