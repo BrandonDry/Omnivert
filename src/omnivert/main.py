@@ -13,9 +13,9 @@ import sys
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
@@ -53,18 +53,41 @@ from .schemas import (
 # Guardrail: refuse absurdly large folder batches so a stray "C:\" pick can't hang.
 MAX_BATCH_FILES = 1000
 SKIPPED_BATCH_DIRS = {".git", ".venv", "__pycache__", "dist", "node_modules"}
+# Refuse a single request body larger than this (memory guard for stray huge uploads).
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
 app = FastAPI(title="Omnivert", version="0.1.0")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+@app.middleware("http")
+async def _limit_request_size(request: Request, call_next):
+    """Reject oversized request bodies up front (by Content-Length) so a stray multi-GB
+    upload can't exhaust memory before the route reads it."""
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        try:
+            if int(declared) > MAX_UPLOAD_BYTES:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": "Upload is too large (limit 500 MB)."},
+                )
+        except ValueError:
+            pass
+    return await call_next(request)
+
+
+# CORS is only needed for the Vite dev server (5173) talking to this API cross-origin.
+# In a frozen build the UI is served same-origin from "/", so CORS is unnecessary.
+if not getattr(sys, "frozen", False):
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 def _frontend_dist() -> Path:
     package_web = Path(__file__).resolve().parent / "web"
@@ -192,7 +215,10 @@ def save_markdown(req: SaveMarkdownRequest) -> SaveResult:
     except RuntimeError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Could not save file: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save the file. Check permissions and available disk space.",
+        ) from exc
     return SaveResult(path=path)
 
 
@@ -217,7 +243,10 @@ def save_download(batch_id: str) -> SaveResult:
     except RuntimeError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Could not save file: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save the file. Check permissions and available disk space.",
+        ) from exc
     return SaveResult(path=path)
 
 

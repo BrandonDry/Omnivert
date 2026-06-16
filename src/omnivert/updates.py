@@ -14,6 +14,7 @@ Everything here is best-effort and network-tolerant: failures surface as a struc
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import threading
@@ -22,6 +23,10 @@ from importlib import metadata
 from typing import Dict, List, Optional
 
 from . import gh
+
+# Accept only a PEP 440-style release version (optional pre/post/dev suffix). The pip spec
+# is built from this, so reject anything that could smuggle extra markers/options.
+_VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+)*((a|b|rc)[0-9]+)?(\.post[0-9]+)?(\.dev[0-9]+)?$")
 
 PACKAGE = "markitdown"
 # Mirror the documented install (see CLAUDE.md). Keep in sync; never add "all" here.
@@ -156,6 +161,8 @@ def start_update(version: Optional[str]) -> Dict[str, object]:
             "The conversion engine is bundled with this Windows app. "
             "Install the next Omnivert release to get a newer engine."
         )
+    if version is not None and not _VERSION_RE.match(version):
+        return _fail(f"Refusing to install an invalid engine version: {version!r}")
     with _lock:
         if _state["state"] == "running":
             return dict(_state)

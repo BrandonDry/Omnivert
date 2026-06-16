@@ -12,6 +12,7 @@ import sys
 import threading
 from datetime import datetime, timezone
 from importlib import metadata
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from . import gh
@@ -58,6 +59,38 @@ def _installer_asset(release: dict) -> Optional[str]:
         name = (asset.get("name") or "").lower()
         if name.endswith(".exe") and "omnivert" in name and "setup" in name:
             return asset.get("browser_download_url")
+    return None
+
+
+def _checksums_asset(release: dict) -> Optional[str]:
+    for asset in release.get("assets") or []:
+        if (asset.get("name") or "").lower() == "sha256sums":
+            return asset.get("browser_download_url")
+    return None
+
+
+def _expected_sha256(filename: str) -> Optional[str]:
+    """Best-effort lookup of ``filename``'s SHA-256 from the latest release's SHA256SUMS
+    asset (``<hex>  <filename>`` lines). Returns None if unavailable — verification is then
+    skipped rather than blocking the update."""
+    repo = _repo()
+    if not repo:
+        return None
+    try:
+        rel = gh.get_json(f"https://api.github.com/repos/{repo}/releases/latest")
+        url = _checksums_asset(rel)
+        if not url:
+            return None
+        import urllib.request
+
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            text = resp.read().decode("utf-8", "replace")
+    except Exception:
+        return None
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[-1].lstrip("*").lower() == filename.lower():
+            return parts[0]
     return None
 
 
@@ -246,7 +279,11 @@ def _run_install(download_url: str) -> None:
 
 def _run_installer_update(download_url: str) -> None:
     try:
-        installer_path = installer_update.download_installer(download_url)
+        from urllib.parse import urlparse
+
+        filename = Path(urlparse(download_url).path).name
+        expected = _expected_sha256(filename) if filename else None
+        installer_path = installer_update.download_installer(download_url, expected)
         installer_update.launch_installer(installer_path)
         with _lock:
             _state.update(

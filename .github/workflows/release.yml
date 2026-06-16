@@ -76,6 +76,17 @@ jobs:
         run: |
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion="${{ steps.version.outputs.value }}" packaging\installer.iss
 
+      - name: Generate SHA256SUMS
+        shell: pwsh
+        run: |
+          $assets = @(Get-ChildItem dist/installer/*.exe, dist/*.whl -ErrorAction SilentlyContinue)
+          $lines = foreach ($f in $assets) {
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($f.Name)"
+          }
+          $lines | Set-Content -Path dist/SHA256SUMS -Encoding ascii
+          Get-Content dist/SHA256SUMS
+
       - name: Publish draft release
         uses: softprops/action-gh-release@v2
         with:
@@ -89,6 +100,7 @@ jobs:
           files: |
             dist/installer/*.exe
             dist/*.whl
+            dist/SHA256SUMS
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
