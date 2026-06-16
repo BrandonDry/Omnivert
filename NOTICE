@@ -1,0 +1,12 @@
+Omnivert
+Copyright 2026 BrandonDry
+
+This product is licensed under the Apache License, Version 2.0 (see the LICENSE file).
+
+This product bundles and runs the Microsoft MarkItDown conversion engine
+(https://github.com/microsoft/markitdown), which is licensed under the MIT License,
+Copyright (c) Microsoft Corporation. Omnivert is an independent project and is not
+affiliated with, endorsed by, or sponsored by Microsoft.
+
+Full license texts for MarkItDown and other bundled third-party components are
+reproduced in THIRD_PARTY_NOTICES.md.
