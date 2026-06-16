@@ -151,5 +151,14 @@ Current handoff as of June 16, 2026:
   Capabilities dialog shows engine/dep versions. Inno Setup installed via
   `winget install --id JRSoftware.InnoSetup` (ISCC landed at
   `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`, not Program Files).
-- Remaining manual validation: **update over an existing Omnivert install** (the installer
-  self-update path) and the release/engine automation workflows in `BrandonDry/Omnivert`.
+- **Update-over-install validated (June 16, 2026):** a 0.1.1 installer run silently over the
+  installed 0.1.0 upgraded **in place** (Windows Uninstall version 0.1.0 → 0.1.1, single entry,
+  no side-by-side); upgraded app booted + converted. Repo reverted to 0.1.0 afterward.
+- **Published to GitHub (June 16, 2026):** initial commit on `main` of `BrandonDry/Omnivert`
+  (private), plus Release **v0.1.0** with `Omnivert-Setup-0.1.0.exe` attached
+  (https://github.com/BrandonDry/Omnivert/releases/tag/v0.1.0). The repo's branch is `main`.
+- **`.github/workflows/` NOT yet pushed:** the `gh` OAuth token only has `gist, read:org, repo`
+  (no `workflow`), so GitHub rejected the workflow files. They are committed-out but still on
+  disk. To enable CI: `gh auth refresh -h github.com -s workflow`, then
+  `git add .github/workflows && git commit && git push`. The release/engine-automation CI run is
+  the only remaining unvalidated item.

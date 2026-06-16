@@ -339,8 +339,16 @@ omnivert-app/
      engine/dependency versions. Added `copy_metadata("markitdown", recursive=True)` plus an
      explicit `copy_metadata` list for the optional deps in `_OPTIONAL_DEPS`
      (`src/omnivert/capabilities.py`) — keep the two lists in sync.
-- Still to validate: **update over an existing install** (installer self-update path) and the
-  GitHub release-automation run.
+- **Update-over-install validated (June 16, 2026):** built a 0.1.1 installer and ran it silently
+  over the installed 0.1.0; Windows registered version went 0.1.0 → 0.1.1 **in place** (single
+  Uninstall entry, no side-by-side), and the upgraded app booted and converted a file. (Repo
+  reverted to 0.1.0 afterward; the 0.1.1 build was a throwaway test.)
+- **Published to GitHub (June 16, 2026):** initial commit pushed to `main` on
+  `BrandonDry/Omnivert`; Release **v0.1.0** created with the tested
+  `Omnivert-Setup-0.1.0.exe` (96 MB) attached. **Caveat:** the `gh` token lacks the `workflow`
+  scope, so `.github/workflows/*` were held back from the push (they remain on disk). Run
+  `gh auth refresh -h github.com -s workflow`, then commit + push `.github/workflows/` to enable
+  the release/engine-automation CI — that CI run is the only remaining unvalidated item.
 
 ### 9D — Pluggable self-update apply ✅ implemented
 - `GET /api/app/version` exposes `frozen`. `app_updates.py` returns the installer asset URL
@@ -366,8 +374,10 @@ omnivert-app/
   `tsc`/`lint`/`build`, web asset copy, wheel build, and simulated frozen flags.
 - **Verified on Windows (June 16, 2026):** PyInstaller freeze, Inno `Setup.exe` build, silent
   install, and launch/convert of the installed frozen app.
-- **Still to verify:** installer update *over an existing install*, and GitHub workflow
-  permissions/branch rules (the release/engine-automation runs).
+- **Verified (June 16, 2026):** installer update *over an existing install* (0.1.0 → 0.1.1 in
+  place); initial push to `main` and Release v0.1.0 published on `BrandonDry/Omnivert`.
+- **Still to verify:** the GitHub Actions release/engine-automation runs (blocked until the
+  `.github/workflows/` files are pushed — needs the `workflow` token scope, see 9C).
 - **Open risks:** unsigned `Setup.exe` triggers SmartScreen until code signing; PyInstaller may
   need extra data-file tuning for engine transitive dependencies; first install remains a
   manual `Setup.exe` download.
