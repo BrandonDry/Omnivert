@@ -25,6 +25,9 @@ from .schemas import ConversionResult
 
 # Keep at most this many recent batches; oldest are evicted first.
 _MAX_BATCHES = 64
+# Bound zip packaging so pathological conversion output can't exhaust memory.
+_MAX_MD_BYTES = 25 * 1024 * 1024  # per converted file
+_MAX_TOTAL_BYTES = 200 * 1024 * 1024  # whole archive
 _BATCHES: "OrderedDict[str, List[ConversionResult]]" = OrderedDict()
 # FastAPI runs the (sync) conversion routes in a threadpool, so two batches can be
 # registered concurrently. Guard the store so the OrderedDict can't be corrupted.
@@ -88,18 +91,32 @@ def single_markdown(results: List[ConversionResult]) -> Optional[ConversionResul
 
 def build_zip(results: List[ConversionResult]) -> bytes:
     """Pack every successful conversion's Markdown into a zip, plus a short report
-    listing warnings and any failures so nothing is silently dropped."""
+    listing warnings and any failures so nothing is silently dropped.
+
+    Output is bounded: any single Markdown over ``_MAX_MD_BYTES`` is truncated, and once the
+    cumulative size passes ``_MAX_TOTAL_BYTES`` the rest are skipped — so pathological engine
+    output can't balloon memory. Both events are recorded in the report."""
     buf = io.BytesIO()
     used: set = set()
+    notes: List[str] = []
+    total = 0
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for result in successful(results):
+            content = (result.markdown or "").encode("utf-8")
+            if total >= _MAX_TOTAL_BYTES:
+                notes.append(f"{result.filename}: skipped (archive size limit reached)")
+                continue
+            if len(content) > _MAX_MD_BYTES:
+                content = content[:_MAX_MD_BYTES] + b"\n\n<!-- truncated: output exceeded limit -->\n"
+                notes.append(f"{result.filename}: truncated (output exceeded per-file limit)")
             arcname = _dedupe_name(_md_arcname(result.filename), used)
-            zf.writestr(arcname, result.markdown or "")
-        zf.writestr("_conversion-report.txt", _report(results))
+            zf.writestr(arcname, content)
+            total += len(content)
+        zf.writestr("_conversion-report.txt", _report(results, notes))
     return buf.getvalue()
 
 
-def _report(results: List[ConversionResult]) -> str:
+def _report(results: List[ConversionResult], notes: Optional[List[str]] = None) -> str:
     ok = [r for r in results if r.ok]
     failed = [r for r in results if not r.ok]
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -116,6 +133,10 @@ def _report(results: List[ConversionResult]) -> str:
             lines.append(f"    {r.error}")
         for w in r.warnings:
             lines.append(f"    warning: {w}")
+    if notes:
+        lines.append("")
+        lines.append("Size limits applied:")
+        lines.extend(f"- {n}" for n in notes)
     lines.append("")
     return "\n".join(lines)
 

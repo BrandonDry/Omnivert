@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Tuple
 from markitdown import MarkItDown as Engine, StreamInfo
 
 from . import settings as settings_module
+from . import url_guard
 from .claude_shim import build_llm_client
 from .schemas import ConversionResult, ConvertOptions
 
@@ -162,6 +163,17 @@ class ConversionService:
         return self._run_capturing(filename, opts, run)
 
     def convert_url(self, url: str, opts: ConvertOptions) -> ConversionResult:
+        blocked = url_guard.blocked_reason(url)
+        if blocked:
+            return ConversionResult(
+                filename=url,
+                ok=False,
+                error=blocked,
+                error_kind="blocked_url",
+                remediation="Use a public http(s) URL. Local files, internal addresses, and "
+                "non-web schemes are blocked for safety.",
+            )
+
         def run(md: Engine):
             return md.convert_uri(url, **self._convert_kwargs(opts))
 
