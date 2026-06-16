@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { Header } from "@/components/Header"
 import { ConvertPanel } from "@/components/ConvertPanel"
@@ -26,6 +26,33 @@ function App() {
   const [options, setOptions] = useState<ConvertOptions>(DEFAULT_OPTIONS)
   const [update, setUpdate] = useState<UpdateInfo | null>(null)
   const [appUpdate, setAppUpdate] = useState<AppUpdateInfo | null>(null)
+  // Latest settings + last-check time, read by the in-session re-check timer/listeners
+  // without re-subscribing them on every settings change.
+  const settingsRef = useRef<Settings | null>(null)
+  const lastCheckRef = useRef(0)
+
+  // Quiet update checks for both the app and the engine (opt-out via Settings). Failures
+  // (offline) just leave the badge off; a release the user chose to skip won't light it.
+  // Throttled so frequent window refocus can't spam the API — `force` bypasses it for the
+  // launch-time check.
+  const runUpdateChecks = useCallback((s: Settings, force = false) => {
+    if (s.auto_check_updates === false) return
+    const now = Date.now()
+    if (!force && now - lastCheckRef.current < 60 * 60 * 1000) return
+    lastCheckRef.current = now
+    checkUpdates()
+      .then(setUpdate)
+      .catch(() => setUpdate(null))
+    checkAppUpdate()
+      .then((info) =>
+        setAppUpdate(
+          info.latest && info.latest === s.skipped_app_version
+            ? { ...info, update_available: false }
+            : info,
+        ),
+      )
+      .catch(() => setAppUpdate(null))
+  }, [])
 
   // Seed UI defaults and theme from saved settings; capabilities populate the header
   // badge and the Capabilities dialog.
@@ -37,6 +64,7 @@ function App() {
     getSettings()
       .then((s) => {
         applySettings(s)
+        settingsRef.current = s
         setOptions((o) => ({
           ...o,
           keep_data_uris: s.default_keep_data_uris,
@@ -46,29 +74,35 @@ function App() {
             ? s.default_azure_backend
             : "none",
         }))
-        // Quiet launch-time update checks (opt-out via Settings). Failures (offline) just
-        // leave the badge off; a release the user chose to skip won't light the badge.
-        if (s.auto_check_updates !== false) {
-          checkUpdates()
-            .then(setUpdate)
-            .catch(() => setUpdate(null))
-          checkAppUpdate()
-            .then((info) =>
-              setAppUpdate(
-                info.latest && info.latest === s.skipped_app_version
-                  ? { ...info, update_available: false }
-                  : info,
-              ),
-            )
-            .catch(() => setAppUpdate(null))
-        }
+        runUpdateChecks(s, true)
       })
       .catch(() => setSettings(null))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // In-session re-check: a long-running window (the app can stay open for days) learns about
+  // a new release without a restart — on a ~24h timer and when the window regains focus.
+  useEffect(() => {
+    const tick = () => {
+      const s = settingsRef.current
+      if (s) runUpdateChecks(s)
+    }
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick()
+    }
+    const id = setInterval(tick, 24 * 60 * 60 * 1000)
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("focus", onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("focus", onVisible)
+    }
+  }, [runUpdateChecks])
+
   function applySettings(s: Settings) {
     setSettings(s)
+    settingsRef.current = s
     setTheme(s.theme as Theme)
     setOptions((o) => ({
       ...o,

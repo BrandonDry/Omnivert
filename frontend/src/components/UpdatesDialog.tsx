@@ -78,6 +78,18 @@ export function UpdatesDialog({
   const appDownloadUrl = appUpdate?.download_url
   const appHasInstallerOrWheel = !!appDownloadUrl
 
+  // When an app update is available it bundles a newer conversion engine; show that delta in
+  // the app section so users see what actually improved (frozen builds act on this section,
+  // not the engine one, which they can't apply directly).
+  const engineInstalled = update?.installed
+  const engineLatest = update?.latest
+  const showEngineDelta =
+    appConfigured &&
+    !!appUpdate?.update_available &&
+    !!engineInstalled &&
+    !!engineLatest &&
+    engineInstalled !== engineLatest
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
@@ -124,6 +136,12 @@ export function UpdatesDialog({
                 <p className="text-xs text-muted-foreground">
                   Set your GitHub repository (owner/repo) in Settings to enable app update
                   checks.
+                </p>
+              ) : showEngineDelta ? (
+                <p className="text-xs text-muted-foreground">
+                  Includes the bundled conversion engine:{" "}
+                  <span className="font-mono">{engineInstalled}</span> →{" "}
+                  <span className="font-mono">{engineLatest}</span>.
                 </p>
               ) : undefined
             }

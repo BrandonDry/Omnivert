@@ -89,9 +89,13 @@ jobs:
 
             Safety checks passed in this workflow:
             - backend import checks
-            - representative conversion smoke tests
+            - representative conversion smoke tests (txt/csv/html + pdf/docx/pptx/xlsx)
             - frontend typecheck/build/lint
             - wheel build
+
+            After merge this tags a release and builds a **draft** GitHub Release with the
+            bundled MarkItDown changelog. Users are not prompted until a maintainer clicks
+            **Publish** on that draft — that publish is the human approval gate.
 
       - name: Merge guarded PR and tag release
         if: steps.cpr.outputs.pull-request-number != ''
