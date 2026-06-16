@@ -1,0 +1,33 @@
+name: Watch Conversion Engine
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check PyPI for newer conversion engine
+        id: check
+        run: python scripts/check_latest_engine.py
+
+      - name: Dispatch guarded engine update
+        if: steps.check.outputs.update_available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run engine-update.yml \
+            --ref "${{ github.ref_name }}" \
+            -f engine_version="${{ steps.check.outputs.latest }}"
