@@ -58,6 +58,38 @@ MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
 app = FastAPI(title="Omnivert", version=APP_VERSION)
 
+# The backend is a localhost-only companion to the desktop window and has no auth: any
+# loopback client is trusted, because the only intended client is the bundled UI running
+# as the same user. Loopback names a request may legitimately carry as its Host header.
+_ALLOWED_API_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+@app.middleware("http")
+async def _guard_host(request: Request, call_next):
+    """Reject requests whose Host header isn't a loopback name.
+
+    This is a DNS-rebinding guard. The server binds 127.0.0.1, but that alone doesn't stop
+    a malicious website the user visits in their normal browser from rebinding its own
+    hostname to 127.0.0.1 and POSTing to the unauthenticated local API — and because that
+    makes the request look same-origin to the browser, CORS does not protect against it.
+    A rebound request still carries the attacker's hostname in its Host header, so refusing
+    non-loopback hosts closes the vector. The bundled UI always talks to
+    http://127.0.0.1:<port>, and the Vite dev proxy forwards as localhost, so legitimate
+    traffic is unaffected. Requests with no Host header (rare non-browser clients) are
+    allowed through — a browser-based attacker cannot omit it."""
+    host = request.headers.get("host", "").strip()
+    if host:
+        if host.startswith("["):  # bracketed IPv6, optionally with :port -> [::1]:8765
+            hostname = host[1:].split("]", 1)[0]
+        else:  # host[:port] -> drop the port if present
+            hostname = host.rsplit(":", 1)[0]
+        if hostname.lower() not in _ALLOWED_API_HOSTS:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "This local API only accepts loopback requests."},
+            )
+    return await call_next(request)
+
 
 @app.middleware("http")
 async def _limit_request_size(request: Request, call_next):
@@ -138,6 +170,11 @@ def convert_file(
 
 @app.post("/api/convert/folder", response_model=BatchResult)
 def convert_folder(req: FolderConvertRequest) -> BatchResult:
+    # CodeQL flags this as path-injection (py/path-injection). By design: this is a local
+    # file converter, so reading the folder the user themselves selected (native picker or
+    # a typed path) on their own machine is the feature, not a flaw — there is no safe root
+    # to confine to. The unauthenticated-local-API vector this could otherwise enable is
+    # closed by the loopback Host guard above (_guard_host).
     root = Path(req.path.strip()).expanduser()
     if not root.exists() or not root.is_dir():
         raise HTTPException(status_code=400, detail=f"Not a folder: {req.path}")
@@ -162,6 +199,8 @@ def convert_paths(req: PathsConvertRequest) -> BatchResult:
         raise HTTPException(status_code=422, detail="No paths provided.")
     results: List[ConversionResult] = []
     for raw in req.paths:
+        # By design / path-injection (see convert_folder): these paths are the local files
+        # the user selected to convert; reading them is the feature. Guarded by _guard_host.
         path = Path(raw).expanduser()
         if not path.is_file():
             results.append(
