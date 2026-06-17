@@ -9,19 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.1] - 2026-06-17
 
-First public release, with full branding and complete release artifacts.
-
-### Added
-- Application and installer branding: the Omnivert logo is embedded in `Omnivert.exe`,
-  the `Setup.exe` installer, the Start-menu and desktop shortcuts, and the uninstall entry.
-
-### Changed
-- Release artifacts now include the Python wheel and a `SHA256SUMS` file (for integrity
-  verification) alongside the Windows installer.
-
-## [0.1.0] - 2026-06-16
-
-Initial release.
+Initial public release.
 
 ### Added
 
@@ -37,6 +25,8 @@ Initial release.
 - In-app update checks for both the app (GitHub Releases) and the bundled conversion engine
   (PyPI), with self-update via the next `Setup.exe` on installed Windows builds.
 - Per-user Windows installer (PyInstaller + Inno Setup); no admin rights required.
+- Application and installer branding: the Omnivert logo is embedded in `Omnivert.exe`, the
+  `Setup.exe` installer, the Start-menu and desktop shortcuts, and the uninstall entry.
 - Apache-2.0 licensed, with MarkItDown (MIT) attribution and third-party notices.
 
 ### Security
@@ -45,9 +35,8 @@ Initial release.
   hosts.
 - Request-size and batch-output bounds to prevent memory exhaustion.
 - Local-only (loopback) API binding.
-- Published `SHA256SUMS` for release artifacts as an interim integrity measure (code signing
-  is a planned follow-up; see SECURITY.md).
+- Release artifacts include the Python wheel and a published `SHA256SUMS` file as an interim
+  integrity measure (code signing is a planned follow-up; see SECURITY.md).
 
 [Unreleased]: https://github.com/BrandonDry/Omnivert/compare/v0.1.1...HEAD
-[0.1.1]: https://github.com/BrandonDry/Omnivert/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/BrandonDry/Omnivert/releases/tag/v0.1.0
+[0.1.1]: https://github.com/BrandonDry/Omnivert/releases/tag/v0.1.1

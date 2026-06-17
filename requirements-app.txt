@@ -1,7 +1,0 @@
-# Extra backend dependencies for Omnivert (installed into the project's .venv).
-# The conversion engine and its converters are already installed in the venv.
-fastapi
-uvicorn[standard]
-python-multipart
-trio
-pywebview
