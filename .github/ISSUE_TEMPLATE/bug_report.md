@@ -32,7 +32,7 @@ Paste any error message, warning callout, or relevant log output here.
 
 ## Environment
 
-- Omnivert version: <!-- Help/About, or the installer filename, e.g. Omnivert-Setup-0.1.0.exe -->
+- Omnivert version: <!-- Help/About, or the installer filename, e.g. Omnivert-Setup-<version>.exe -->
 - Windows version: <!-- e.g. Windows 11 23H2 -->
 - Install type: <!-- installed Setup.exe / running from source -->
 

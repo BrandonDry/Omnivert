@@ -95,8 +95,6 @@ $env:PIP_CACHE_DIR="$PWD\.pip-cache"; ..\.venv\Scripts\python.exe -m pip wheel -
 
 ## Handoff
 
-Read `PHASES.md` for the detailed phase history, current status, and kickoff lines.
-
 ### Naming conventions
 
 - The source package, distribution name, console script, frontend surfaces, docs, scripts,

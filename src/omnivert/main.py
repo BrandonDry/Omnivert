@@ -56,7 +56,7 @@ SKIPPED_BATCH_DIRS = {".git", ".venv", "__pycache__", "dist", "node_modules"}
 # Refuse a single request body larger than this (memory guard for stray huge uploads).
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
-app = FastAPI(title="Omnivert", version="0.1.0")
+app = FastAPI(title="Omnivert", version=APP_VERSION)
 
 
 @app.middleware("http")

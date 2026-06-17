@@ -1,6 +1,6 @@
 """Bridge to the native pywebview window for OS file/folder pickers.
 
-``app.py`` creates the window and hands it here via :func:`set_window`, so the API
+The launcher creates the window and hands it here via :func:`set_window`, so the API
 routes (running on the Uvicorn thread) can pop a real native dialog. When the backend
 runs without a window — e.g. the Vite dev server hitting ``uvicorn`` directly — the
 pickers report themselves unavailable instead of crashing, and the UI hides the buttons.
@@ -22,7 +22,7 @@ _window = None
 
 
 def set_window(window) -> None:
-    """Register the live pywebview ``Window`` (called once from ``app.py``)."""
+    """Register the live pywebview ``Window`` (called once from the launcher)."""
     global _window
     _window = window
 

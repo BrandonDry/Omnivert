@@ -45,7 +45,7 @@ Omnivert installers are currently **not code-signed**. This means:
   verify a download by comparing its SHA-256 hash against that file:
 
   ```powershell
-  Get-FileHash .\Omnivert-Setup-0.1.0.exe -Algorithm SHA256
+  Get-FileHash .\Omnivert-Setup-<version>.exe -Algorithm SHA256
   ```
 
   Note: a published checksum protects against **corruption and tampering in transit**, but

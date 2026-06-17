@@ -60,7 +60,7 @@ To independently verify your download, each release publishes a `SHA256SUMS` fil
 it against your downloaded installer:
 
 ```powershell
-Get-FileHash .\Omnivert-Setup-0.1.0.exe -Algorithm SHA256
+Get-FileHash .\Omnivert-Setup-<version>.exe -Algorithm SHA256
 ```
 
 The printed hash should match the matching line in `SHA256SUMS`. Code signing is a planned
@@ -117,8 +117,8 @@ $env:PYTHONPATH="$PWD\src"
 npm run dev --prefix frontend   # proxies /api -> 127.0.0.1:8765
 ```
 
-The backend package lives under `src/omnivert`. `app.py` is only a compatibility shim;
-new commands should use `python -m omnivert` or the `omnivert` console script.
+The backend package lives under `src/omnivert`; run it with `python -m omnivert` or the
+`omnivert` console script.
 
 See [CLAUDE.md](CLAUDE.md) for the architecture map and [CONTRIBUTING.md](CONTRIBUTING.md)
 for how to set up, build, and submit changes.
@@ -163,7 +163,7 @@ npm run build --prefix frontend
 python scripts\copy_web_assets.py
 python -m pip install -e ".[build]"
 pyinstaller packaging\app.spec --noconfirm --clean
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion="0.1.0" packaging\installer.iss
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion="0.1.1" packaging\installer.iss
 ```
 
 The installer is written to `dist/installer/`. Release automation is documented in
