@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-17
+
+First public release, with full branding and complete release artifacts.
+
+### Added
+- Application and installer branding: the Omnivert logo is embedded in `Omnivert.exe`,
+  the `Setup.exe` installer, the Start-menu and desktop shortcuts, and the uninstall entry.
+
+### Changed
+- Release artifacts now include the Python wheel and a `SHA256SUMS` file (for integrity
+  verification) alongside the Windows installer.
+
 ## [0.1.0] - 2026-06-16
 
 Initial release.
@@ -36,5 +48,6 @@ Initial release.
 - Published `SHA256SUMS` for release artifacts as an interim integrity measure (code signing
   is a planned follow-up; see SECURITY.md).
 
-[Unreleased]: https://github.com/BrandonDry/Omnivert/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/BrandonDry/Omnivert/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/BrandonDry/Omnivert/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/BrandonDry/Omnivert/releases/tag/v0.1.0
