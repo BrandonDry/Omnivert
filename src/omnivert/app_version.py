@@ -11,7 +11,7 @@ import subprocess
 from functools import lru_cache
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # Repo root = the app dir; ..\.venv lives outside it in the working wrapper.
 _APP_DIR = Path(__file__).resolve().parents[2]
