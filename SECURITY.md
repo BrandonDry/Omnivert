@@ -28,7 +28,14 @@ released version. Please update to the newest release before reporting an issue.
 Omnivert runs locally on your machine. A few properties are worth understanding:
 
 - **Local-only API.** The bundled FastAPI backend binds to loopback (`127.0.0.1`) only, and
-  the frozen desktop UI is same-origin. There is no remote network listener.
+  the frozen desktop UI is same-origin. There is no remote network listener. As a
+  defense-in-depth measure against DNS rebinding, the backend also rejects any request whose
+  `Host` header is not a loopback name, so a website cannot reach the local API by pointing
+  its own hostname at `127.0.0.1`.
+- **Local file access is intentional.** The folder/paths conversion endpoints read the files
+  and folders you select (via the native picker or a typed path) so they can be converted to
+  Markdown. Reading your own files is the app's purpose; the API does not write to arbitrary
+  paths (saving goes through the native save dialog).
 - **URL conversion is restricted.** The URL converter accepts only `http`/`https` URLs and
   rejects other schemes (e.g. `file:`) and hosts that resolve to loopback, private, or
   link-local address ranges, to avoid local-file and internal-network access.
