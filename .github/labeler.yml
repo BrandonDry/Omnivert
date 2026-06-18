@@ -1,0 +1,24 @@
+# Configuration for actions/labeler — applies labels based on changed paths.
+# Pinned action is v4, so this uses the v4 glob-list syntax.
+# Docs: https://github.com/actions/labeler/tree/v4.3.0
+
+frontend:
+  - 'frontend/**'
+
+backend:
+  - 'src/**'
+  - 'tests/**'
+
+packaging:
+  - 'packaging/**'
+
+ci:
+  - '.github/**'
+
+documentation:
+  - '**/*.md'
+
+dependencies:
+  - 'pyproject.toml'
+  - 'frontend/package.json'
+  - 'frontend/package-lock.json'
