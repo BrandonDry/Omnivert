@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/BrandonDry/Omnivert/releases/latest"><img src="https://img.shields.io/github/v/release/BrandonDry/Omnivert?label=download&color=863bff" alt="Latest release"></a>
+  <a href="https://github.com/BrandonDry/Omnivert/releases/latest"><img src="https://img.shields.io/github/v/release/BrandonDry/Omnivert?label=download&color=7e14ff" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
   <img src="https://img.shields.io/badge/platform-Windows-0078d4" alt="Platform: Windows">
 </p>
