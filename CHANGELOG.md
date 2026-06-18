@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-06-18
+
+### Changed
+
+- Replaced the application logo with an original "converge arrow" mark (multiple inputs
+  converging into a single rightward output). The previous icon was a recolored copy of the
+  Vite logo; the new mark is unique to Omnivert and reused across the app UI, favicon/PWA
+  icons, the embedded `Omnivert.exe`/installer icon, and the README/social images.
+
+### Fixed
+
+- `packaging/generate_logo_assets.py` no longer reproduces the old Vite-derived glyph; it
+  now generates all branding assets from the new mark so regenerating stays in sync.
+
 ## [0.1.1] - 2026-06-17
 
 Initial public release.
