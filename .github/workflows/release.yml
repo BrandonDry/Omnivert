@@ -14,20 +14,56 @@ on:
 permissions:
   contents: write
 
+# One release build per version at a time. Don't cancel in-progress builds: a tag-push
+# that arrives mid-build should queue, not kill the run that may be uploading assets.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
+  # Publishing a draft release creates its tag, which re-fires the `push: tags` trigger and
+  # would rebuild + clobber the just-published release (action-gh-release would flip it back
+  # to draft). Skip the build when a *published* release already exists for this tag.
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: Skip if a published release already exists for this tag
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "Not a tag push (event=${{ github.event_name }}); proceeding."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tag="${{ github.ref_name }}"
+          state=$(gh release view "$tag" --repo "${{ github.repository }}" --json isDraft -q .isDraft 2>/dev/null || echo "missing")
+          if [ "$state" = "false" ]; then
+            echo "Published release $tag already exists; skipping duplicate build."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No published release for $tag (state=$state); proceeding."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
+    needs: guard
+    if: needs.guard.outputs.skip != 'true'
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
           cache: pip
@@ -103,7 +139,7 @@ jobs:
             dist/SHA256SUMS
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: omnivert-${{ steps.version.outputs.value }}
           path: |
