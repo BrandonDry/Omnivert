@@ -1,6 +1,6 @@
 #define MyAppName "Omnivert"
 #ifndef MyAppVersion
-#define MyAppVersion "0.1.1"
+#define MyAppVersion "0.1.2"
 #endif
 #define MyAppPublisher "Omnivert"
 #define MyAppExeName "Omnivert.exe"
