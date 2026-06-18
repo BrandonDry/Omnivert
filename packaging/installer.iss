@@ -1,6 +1,6 @@
 #define MyAppName "Omnivert"
 #ifndef MyAppVersion
-#define MyAppVersion "0.1.2"
+#define MyAppVersion "0.1.3"
 #endif
 #define MyAppPublisher "Omnivert"
 #define MyAppExeName "Omnivert.exe"
@@ -39,4 +39,7 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+; Refresh the Windows icon cache so an in-place update repaints Start/desktop/taskbar
+; shortcuts with the new logo immediately, instead of serving the previously cached icon.
+Filename: "{sys}\ie4uinit.exe"; Parameters: "-show"; Flags: runhidden skipifdoesntexist
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent

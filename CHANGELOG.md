@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-06-18
+
+### Fixed
+
+- Ensure the new "converge arrow" logo actually reaches users on install/update. The frozen
+  `Omnivert.exe` now carries a proper Windows version resource (product name + per-release
+  `FileVersion`/`ProductVersion`); previously it had none, so Windows labelled it the generic
+  "Windows Application" and was prone to serving a stale cached icon after an in-place update.
+- The installer now refreshes the Windows icon cache (`ie4uinit.exe -show`) after copying
+  files, so updated Start-menu, desktop, and taskbar shortcuts repaint with the new logo
+  immediately instead of keeping the previously cached icon.
+
+### Changed
+
+- Aligned the residual brand color `#863bff` (the old logo's fill) with the new mark's core
+  purple `#7e14ff` in the PWA/web `theme-color` and the README release badge.
+
 ## [0.1.2] - 2026-06-18
 
 ### Changed
