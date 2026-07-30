@@ -42,7 +42,7 @@ dependencies = [
   "python-multipart",
   "trio",
   "pywebview",
-  "markitdown[pptx,docx,xlsx,xls,pdf,outlook,az-doc-intel,az-content-understanding,audio-transcription]==0.1.6",
+  "markitdown[pptx,docx,xlsx,xls,pdf,outlook,az-doc-intel,az-content-understanding,audio-transcription]==0.1.7",
 ]
 
 [project.optional-dependencies]
