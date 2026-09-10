@@ -131,3 +131,36 @@ def test_pywebviews_own_server_is_not_excluded():
     """bottle is pywebview's real HTTP server, not build tooling. Excluding it would break
     the desktop window in a way no unit test here would catch."""
     assert "bottle" not in _spec_excludes()
+
+
+# --- the upgrade path -----------------------------------------------------------------
+#
+# Inno only adds and overwrites; it never removes a file a newer release stopped shipping.
+# PyInstaller versions every dist-info directory name, so without an [InstallDelete] an
+# upgrade layers the new release on top of the old one. Measured upgrading an installed 0.1.3
+# to 0.1.6: 17 packages ended up with two dist-info directories, and
+# importlib.metadata.version("markitdown") returned the OLDER one, so get_capabilities()
+# reported an engine version the build does not contain. Conversions still worked, because
+# only the metadata was stale, which is why nothing short of an install test found it.
+
+ISS_PATH = Path(__file__).resolve().parents[1] / "packaging" / "installer.iss"
+
+
+def test_the_installer_clears_the_previous_payload():
+    text = ISS_PATH.read_text(encoding="utf-8")
+    assert "[InstallDelete]" in text, (
+        "installer.iss has no [InstallDelete] section, so an upgrade will leave the previous "
+        "release's files in place and the Capabilities dialog will report stale versions"
+    )
+    target = 'Type: filesandordirs; Name: "{app}\\_internal"'
+    assert target in text, (
+        "[InstallDelete] no longer removes the _internal directory, which is where the whole "
+        f"PyInstaller payload lives. Expected a line reading: {target}"
+    )
+
+
+def test_install_delete_runs_before_the_files_are_copied():
+    """Inno processes [InstallDelete] before [Files] regardless of order in the script, but
+    keeping them in reading order stops a future edit from looking wrong."""
+    text = ISS_PATH.read_text(encoding="utf-8")
+    assert text.index("[InstallDelete]") < text.index("\n[Files]")
