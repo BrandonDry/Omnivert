@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-09-10
+
+0.1.4, 0.1.5 and 0.1.6 were all built and never published. Coming from 0.1.3, this release
+carries every one of them: the conversion engine bump to MarkItDown 0.1.7, the security
+fixes, the licensing and bundle corrections, and the upgrade fix below.
+
+### Fixed
+
+- **Upgrading left the previous release's files behind.** The installer only ever added and
+  overwrote files, so an upgrade layered the new release on top of the old one instead of
+  replacing it. Because PyInstaller puts the version in every `dist-info` directory name,
+  installing over an older Omnivert left two of them for seventeen packages, and the version
+  lookup then returned whichever it found first. The visible symptom: after upgrading from
+  0.1.3, the Capabilities dialog reported **conversion engine 0.1.6** on a build that ships
+  **0.1.7**, and every other dependency version it listed was equally unreliable.
+  Conversions were unaffected, because the code was the new code and only the metadata was
+  stale, which is why nothing but an actual install test could have caught it. The installer
+  now clears its own program files before writing the new ones. Your settings are stored
+  outside the application directory and are not touched.
+
 ## [0.1.6] - 2026-09-10
 
 0.1.4 and 0.1.5 were both built and never published, so everything in their sections below
@@ -288,7 +308,8 @@ Initial public release.
 - Release artifacts include the Python wheel and a published `SHA256SUMS` file as an interim
   integrity measure (code signing is a planned follow-up; see SECURITY.md).
 
-[Unreleased]: https://github.com/BrandonDry/Omnivert/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/BrandonDry/Omnivert/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/BrandonDry/Omnivert/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/BrandonDry/Omnivert/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/BrandonDry/Omnivert/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/BrandonDry/Omnivert/compare/v0.1.3...v0.1.4

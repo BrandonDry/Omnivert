@@ -37,6 +37,26 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
+[InstallDelete]
+; Wipe the previous release's payload before laying down this one.
+;
+; Inno only ADDS and overwrites; it never removes a file that a newer release stopped
+; shipping. PyInstaller's onedir layout renames files, drops dependencies, and puts the
+; version in every dist-info directory name, so without this an upgrade quietly
+; accumulates the release before it.
+;
+; Measured upgrading 0.1.3 to 0.1.6 before this existed: 17 packages ended up with TWO
+; dist-info directories, markitdown-0.1.6.dist-info from June sitting beside
+; markitdown-0.1.7.dist-info from the new build. importlib.metadata.version() then
+; returned the OLDER one, so the Capabilities dialog told the user they were running an
+; engine the build does not contain, and every dependency version in that dialog was
+; equally unreliable. Conversions still worked, because the code was new and only the
+; metadata was stale, which is exactly why nothing caught it before an install test did.
+;
+; Only _internal is removed. Omnivert.exe is overwritten by [Files] below, and settings
+; live in %LOCALAPPDATA%\Omnivert rather than here, so nothing the user owns is touched.
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Files]
 Source: "..\dist\Omnivert\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
