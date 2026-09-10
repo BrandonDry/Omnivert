@@ -89,7 +89,7 @@ def test_oversized_markdown_is_truncated_and_reported():
 # --- Content-Disposition --------------------------------------------------------------
 
 def test_content_disposition_is_latin1_encodable_for_unicode_names():
-    header = jobs.content_disposition("café—報告.md")
+    header = jobs.content_disposition("café…報告.md")
     header.encode("latin-1")  # would raise before the RFC 5987 handling
 
 

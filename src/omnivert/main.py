@@ -73,10 +73,16 @@ async def _guard_host(request: Request, call_next):
     hostname to 127.0.0.1 and POSTing to the unauthenticated local API — and because that
     makes the request look same-origin to the browser, CORS does not protect against it.
     A rebound request still carries the attacker's hostname in its Host header, so refusing
-    non-loopback hosts closes the vector. The bundled UI always talks to
-    http://127.0.0.1:<port>, and the Vite dev proxy forwards as localhost, so legitimate
-    traffic is unaffected. Requests with no Host header (rare non-browser clients) are
-    allowed through — a browser-based attacker cannot omit it."""
+    non-loopback hosts closes THAT vector. It does not, and cannot, stop a page addressing
+    http://127.0.0.1:<port> directly: the Host is then a loopback name and must be allowed,
+    since that is how the bundled UI itself talks to the API. What limits the direct case is
+    the absence of a cross-origin allow header (the page cannot read any response) and the
+    fastapi>=0.132 floor (a JSON route rejects a body sent with a CORS-simple content type,
+    so it needs a preflight this app refuses). SECURITY.md states that residual for users.
+
+    The bundled UI always talks to http://127.0.0.1:<port>, and the Vite dev proxy forwards
+    as localhost, so legitimate traffic is unaffected. Requests with no Host header (rare
+    non-browser clients) are allowed through: a browser-based attacker cannot omit it."""
     host = request.headers.get("host", "").strip()
     if host:
         if host.startswith("["):  # bracketed IPv6, optionally with :port -> [::1]:8765

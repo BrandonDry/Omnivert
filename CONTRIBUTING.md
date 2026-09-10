@@ -2,16 +2,16 @@
 
 Thanks for your interest in improving Omnivert! This project is a Windows desktop GUI around
 the Microsoft [MarkItDown](https://github.com/microsoft/markitdown) conversion engine.
-Contributions of all kinds are welcome — bug reports, fixes, features, and docs.
+Contributions of all kinds are welcome: bug reports, fixes, features, and docs.
 
 By participating you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Ways to contribute
 
-- **Report a bug** — open an issue using the **Bug report** template.
-- **Request a feature** — open an issue using the **Feature request** template.
-- **Fix or build something** — see the workflow below.
-- **Security issues** — please do **not** open a public issue. Follow
+- **Report a bug:** open an issue using the **Bug report** template.
+- **Request a feature:** open an issue using the **Feature request** template.
+- **Fix or build something:** see the workflow below.
+- **Security issues:** please do **not** open a public issue. Follow
   [SECURITY.md](SECURITY.md) instead.
 
 ## Project layout
@@ -19,12 +19,15 @@ By participating you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md)
 Omnivert is a **FastAPI** backend + **React/Vite/TypeScript/Tailwind** frontend, shipped as a
 native window via **pywebview** and packaged for Windows with PyInstaller + Inno Setup.
 
-- `src/omnivert/` — Python backend (FastAPI routes, conversion service, updaters, launcher).
-- `frontend/` — React UI; the built assets are copied into `src/omnivert/web/`.
-- `packaging/` — PyInstaller spec + Inno Setup script.
-- `scripts/` — build/release helpers.
-- `tests/engine_smoke.py` — conversion smoke tests (also the CI engine-bump gate).
-- `.github/workflows/` — release and engine auto-update automation.
+- `src/omnivert/`: Python backend (FastAPI routes, conversion service, updaters, launcher).
+- `frontend/`: React UI; the built assets are copied into `src/omnivert/web/`.
+- `packaging/`: PyInstaller spec + Inno Setup script.
+- `scripts/`: build/release helpers.
+- `tests/` (`pytest` suite): unit tests for settings, the URL guard, batch packaging, the
+  capability table, and the engine cache. Run with `python -m pytest -q` from the repo root.
+- `tests/engine_smoke.py`: real conversion smoke tests, run separately (pytest does not
+  collect it). It is the gate the automated engine bump relies on.
+- `.github/workflows/`: CI (`ci.yml`), release, and engine auto-update automation.
 
 See [CLAUDE.md](CLAUDE.md) for a fuller architecture map.
 
@@ -59,17 +62,22 @@ Primary development happens on **Windows 11 / PowerShell**.
 
 ## Before you open a pull request
 
-Please run the local checks and make sure they pass:
+CI runs these on every pull request (`.github/workflows/ci.yml`, Python 3.11 and 3.12 plus
+the frontend job). Run them locally first so you are not waiting on the runner:
 
 ```powershell
 # Backend
 python -m compileall src
+python -m pytest -q
 $env:PYTHONPATH="$PWD\src"; python tests\engine_smoke.py
 
 # Frontend
 npm run lint --prefix frontend
 npm run build --prefix frontend
 ```
+
+`python -m pytest -q` needs no `PYTHONPATH`: `pyproject.toml` sets `pythonpath = ["src"]`.
+Add or update tests in `tests/` for anything you change in `src/omnivert/`.
 
 Guidelines:
 

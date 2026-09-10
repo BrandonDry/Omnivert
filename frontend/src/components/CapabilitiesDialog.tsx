@@ -118,7 +118,7 @@ export function CapabilitiesDialog({
                   <li key={d.name} className="flex items-center justify-between gap-2">
                     <span
                       className="truncate font-mono text-xs"
-                      title={d.gates ? `${d.name} — enables ${d.gates}` : d.name}
+                      title={d.gates ? `${d.name}: enables ${d.gates}` : d.name}
                     >
                       {d.name}
                     </span>

@@ -7,18 +7,24 @@ Release repository: `BrandonDry/Omnivert`.
 1. Bump `src/omnivert/app_version.py`.
 2. Confirm `src/omnivert/build_info.py` points at `BrandonDry/Omnivert` for the
    release repo.
-3. Run the local checks from `README.md` at least through frontend build, web asset copy,
-   backend smoke, and wheel build.
-4. Commit the change.
-5. Tag the commit with `vX.Y.Z`.
-6. Push the tag.
+3. Move the `## [Unreleased]` entries in `CHANGELOG.md` under a `## [X.Y.Z] - YYYY-MM-DD`
+   heading and update the compare links at the bottom of the file.
+4. Run the local checks from `README.md`: `python -m pytest -q`, `tests\engine_smoke.py`,
+   frontend build and lint, web asset copy, and the wheel build.
+5. Commit the change.
+6. Tag the commit with `vX.Y.Z`.
+7. Push the tag.
 
 The `Build Windows Release` workflow builds the frontend, copies it into the Python
 package, freezes the app with PyInstaller, compiles the Inno Setup installer, and uploads
 `Setup.exe` plus the wheel to the GitHub Release.
 
-The workflow must still be validated on GitHub for repository permissions, branch rules,
-and release asset upload permissions before relying on it for public distribution.
+The release is created as a **draft**. Assets are attached but nothing reaches users until
+a maintainer opens the draft on GitHub and clicks **Publish**. That click is the human
+approval gate, and it is the same gate the automated engine bump goes through.
+
+This chain has been validated end to end on `BrandonDry/Omnivert` (freeze, installer
+compile, silent per-user install, launch, conversion, and update over an existing install).
 
 ## Automated Conversion Engine Releases
 
@@ -31,8 +37,10 @@ When a newer engine exists, `Guarded Engine Update`:
 - bumps the Omnivert patch version
 - stamps the release repo into `build_info.py`
 - runs frontend build/lint
-- installs the updated Python package
+- installs the updated Python package with its test extra
 - runs backend import checks
+- runs the `pytest` suite (catches an engine that changed its accepted extensions or its
+  constructor kwargs, which no conversion failure would reveal)
 - runs conversion smoke tests
 - builds a wheel
 - opens a bot PR

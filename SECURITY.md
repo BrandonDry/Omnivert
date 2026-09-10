@@ -15,7 +15,7 @@ When reporting, please include:
 - The Omnivert version and your Windows version.
 
 We aim to acknowledge reports within a few days and will keep you informed as we work on a
-fix. Coordinated disclosure is appreciated — please give us a reasonable window to release a
+fix. Coordinated disclosure is appreciated, so please give us a reasonable window to release a
 patch before any public discussion.
 
 ## Supported versions
@@ -28,10 +28,21 @@ released version. Please update to the newest release before reporting an issue.
 Omnivert runs locally on your machine. A few properties are worth understanding:
 
 - **Local-only API.** The bundled FastAPI backend binds to loopback (`127.0.0.1`) only, and
-  the frozen desktop UI is same-origin. There is no remote network listener. As a
-  defense-in-depth measure against DNS rebinding, the backend also rejects any request whose
-  `Host` header is not a loopback name, so a website cannot reach the local API by pointing
-  its own hostname at `127.0.0.1`.
+  the frozen desktop UI is same-origin. There is no remote network listener, so nothing else
+  on your network can reach it. As a defense-in-depth measure against DNS rebinding, the
+  backend also rejects any request whose `Host` header is not a loopback name, which stops a
+  website from pointing its own hostname at `127.0.0.1` and then reading the API's responses
+  as though they were its own.
+- **What that guard does not cover.** A page you visit can still address
+  `http://127.0.0.1:<port>` directly. The `Host` header is then a loopback name and the guard
+  allows it, as it must, because that is also how the app's own UI talks to the API. The API
+  has no authentication, so a cross-origin request the browser sends without a preflight (an
+  HTML form post, for example) is accepted and acted on. What limits the damage is that the
+  API returns no cross-origin allow header, so the page cannot read any response, and that
+  every JSON route requires a JSON `Content-Type`, which needs a preflight the API refuses.
+  In practice a hostile page could make Omnivert convert content it supplies, or open a file
+  picker, but it cannot read your files, your conversions, or your stored keys. Fully closing
+  this needs a per-session token shared between the bundled UI and the API.
 - **Local file access is intentional.** The folder/paths conversion endpoints read the files
   and folders you select (via the native picker or a typed path) so they can be converted to
   Markdown. Reading your own files is the app's purpose; the API does not write to arbitrary
@@ -56,7 +67,7 @@ Omnivert installers are currently **not code-signed**. This means:
   ```
 
   Note: a published checksum protects against **corruption and tampering in transit**, but
-  it is not a substitute for a cryptographic signature — it does not, on its own, prove
+  it is not a substitute for a cryptographic signature, and it does not, on its own, prove
   authorship.
 
 > **Planned follow-up:** Authenticode / Azure Trusted Signing of the installer and binaries.

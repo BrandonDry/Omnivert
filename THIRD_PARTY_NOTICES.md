@@ -48,9 +48,10 @@ MIT License
 
 Omnivert's installable build also bundles the Python runtime dependencies required to
 run the engine and the desktop app, including (non-exhaustive): FastAPI, Starlette,
-Uvicorn, pywebview, Trio, pydantic, and the conversion engine's own dependencies such as
-magika, onnxruntime, pdfminer.six, pdfplumber, mammoth, python-pptx, openpyxl, xlrd, and
-markdownify. Each is distributed under its own permissive open-source license (MIT, BSD,
+Uvicorn, pywebview, Trio, pydantic, the `openai` client library (used to reach Claude's
+OpenAI-compatible endpoint for image captioning), and the conversion engine's own
+dependencies such as magika, onnxruntime, pdfminer.six, pdfplumber, mammoth, lxml,
+python-pptx, Pillow, openpyxl, xlrd, pandas, olefile, and markdownify. Each is distributed under its own permissive open-source license (MIT, BSD,
 Apache 2.0, or similar).
 
 The authoritative license and metadata for every installed package is available from its
