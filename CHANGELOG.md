@@ -90,9 +90,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Azure Document Intelligence file-type filter**, matching the one Content Understanding
   already had, so a specific set of extensions can be routed to the cloud backend.
-- A `pytest` suite (94 tests) covering settings redaction, the SSRF URL guard, batch
-  packaging, and the engine-cache invariants. `tests/engine_smoke.py` is unchanged and still
-  runs as the auto-bump gate.
+- A `pytest` suite covering settings redaction, the SSRF URL guard, batch packaging, and the
+  engine-cache invariants. `tests/engine_smoke.py` is unchanged and still runs as the
+  auto-bump gate.
 - **A CI workflow.** Pull requests previously ran only dependency review and the labeler: no
   tests, no typecheck, no lint. `ci.yml` now runs the Python suite on 3.11 and 3.12 plus the
   frontend typecheck, build and lint on every push and pull request, and both `release.yml`

@@ -1,13 +1,11 @@
-# This workflow warns and then closes issues and PRs that have had no activity for a specified amount of time.
-#
-# You can adjust the behavior by modifying this file.
-# For more information, see:
-# https://github.com/actions/stale
+# Marks long-inactive issues and pull requests stale, then closes them if nothing follows.
+# Closing is not a judgement on the report: a closed thread can be commented on and reopened.
 name: Mark stale issues and pull requests
 
 on:
   schedule:
   - cron: '45 7 * * *'
+  workflow_dispatch:
 
 jobs:
   stale:
@@ -21,7 +19,28 @@ jobs:
     - uses: actions/stale@f7176fd3007623b69d27091f9b9d4ab7995f0a06 # v5
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
-        stale-issue-message: 'Stale issue message'
-        stale-pr-message: 'Stale pull request message'
+        days-before-stale: 60
+        # Longer than the action's 7-day default: this is a small project with one
+        # maintainer, so a week is not a fair window for someone to notice and reply.
+        days-before-close: 14
+        stale-issue-message: >
+          This issue has had no activity for 60 days, so it is being marked stale. If it is
+          still relevant, a comment is enough to keep it open. Otherwise it will close in 14
+          days. Closing is not a verdict on the report, and anyone can reopen it later.
+        close-issue-message: >
+          Closing this after 14 days with no further activity. If it is still happening,
+          please comment and it will be reopened. Include your Omnivert version (shown in the
+          Updates dialog) and your Windows version.
+        stale-pr-message: >
+          This pull request has had no activity for 60 days, so it is being marked stale. A
+          comment or a push is enough to keep it open. Otherwise it will close in 14 days, and
+          it can be reopened whenever you want to pick it back up.
+        close-pr-message: >
+          Closing this after 14 days with no further activity. Reopen it any time, the branch
+          and the review history are kept.
         stale-issue-label: 'no-issue-activity'
         stale-pr-label: 'no-pr-activity'
+        # A confirmed bug or an accepted feature should not be closed by a timer just because
+        # nobody has commented on it.
+        exempt-issue-labels: 'bug,security,pinned,help wanted'
+        exempt-pr-labels: 'pinned,work in progress'

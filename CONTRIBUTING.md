@@ -99,7 +99,9 @@ Guidelines:
 
 Good bug reports include:
 
-- Your Omnivert version (Help / About, or the installer filename) and Windows version.
+- Your Omnivert version (the Updates dialog shows it, or read it off the installer
+  filename) and your Windows version. Note the version badge beside the title in the app
+  header is the conversion engine's, not Omnivert's.
 - The input type you were converting and, if possible, a small sample file.
 - What you expected vs. what happened, including any error text or warnings shown.
 

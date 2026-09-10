@@ -41,6 +41,19 @@ Omnivert runs locally on your machine. A few properties are worth understanding:
   any route runs. Previously such a request was accepted and acted on: a form post from a
   hostile page could make Omnivert convert content it supplied, with options that spent your
   configured Claude or Azure credits, or pop a native file picker over your desktop.
+- **Anything that can reach the API is trusted completely.** The backend has no
+  authentication at all, so this is worth stating plainly rather than leaving to be inferred.
+  A caller that reaches it can read any file your account can read (that is what the folder
+  and paths converters do), and two Settings fields turn into more than configuration: the
+  `exiftool_path` setting is passed to the conversion engine, which runs it as a program, and
+  the Claude base URL decides which server the app sends your Claude API key to. Writing those
+  through `PUT /api/settings` and then converting a file is therefore **arbitrary program
+  execution as you, and disclosure of the stored key**, for anyone who can make the request.
+  A website cannot: that is what the cross-site check above stops, and it is tested. What
+  remains is local code, which for same-user malware changes nothing (it could already read
+  your files and run programs as you), but on a machine with more than one account it is a
+  real escalation, because Windows loopback is not isolated per user. The per-session token
+  named below is the fix for this whole class, not just for the cross-site half.
 - **What that still does not cover.** Both headers are set by the browser, so the check is
   only as good as the browser making the request. `Sec-Fetch-Site` arrived in Chromium 76
   (2019), Firefox 90 (2021) and Safari 16.4 (2023). A client that sends neither header is
@@ -50,11 +63,13 @@ Omnivert runs locally on your machine. A few properties are worth understanding:
   requests that change something, so what the allowance leaves open is a cross-site `GET`,
   whose response the page still cannot read. Fully closing this needs a per-session token
   shared between the bundled UI and the API.
-- **Development builds are more permissive.** A copy that is not the packaged Windows build
-  (a `pip install`, or running from source) additionally accepts requests from any origin on
-  loopback, so that the Vite dev server works whichever port it lands on. That means another
-  local web server on your machine could drive the API in that mode. The packaged installer
-  build does not do this: it accepts only its own window's origin.
+- **Development builds are slightly more permissive.** A copy that is not the packaged
+  Windows build (a `pip install`, or running from source) also accepts the Vite dev server's
+  two origins, `http://localhost:5173` and `http://127.0.0.1:5173`, which are the same two
+  the dev CORS policy grants. That is the whole of the difference: any other local origin,
+  including another port such as `http://localhost:3000`, is refused in dev exactly as it is
+  in a packaged build. The packaged installer build has no dev allowance at all and accepts
+  only its own window's origin.
 - **Local file access is intentional.** The folder/paths conversion endpoints read the files
   and folders you select (via the native picker or a typed path) so they can be converted to
   Markdown. Reading your own files is the app's purpose; the API does not write to arbitrary

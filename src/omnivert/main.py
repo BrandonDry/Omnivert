@@ -71,20 +71,18 @@ _DEV_MODE = not getattr(sys, "frozen", False)
 # Vite proxies /api here (frontend/vite.config.ts), so a legitimate dev request arrives naming
 # the dev server's origin rather than this one.
 #
-# Any loopback port, not just 5173: Vite ships with strictPort false, so it silently moves to
-# 5174 when 5173 is taken, and `npm run dev -- --host` moves it too. Pinning one port would
-# turn a port collision into a wall of 403s reading "only accepts requests from the Omnivert
-# window", which is a security-shaped message for a problem that is not one. Running a dev
-# server already means trusting what is listening on loopback, and a frozen build never
-# reaches this at all. What is NOT covered: browsing a `--host` dev server through the
-# machine's LAN address instead of localhost. Use localhost.
-
-# The origins the CORS middleware answers for, which is a NARROWER list than the guard's
-# pattern above, and deliberately so. CORS grants a page the right to READ responses; the
-# guard only decides whether a request runs. The documented dev setup proxies /api through
-# Vite, so the browser sees same-origin and CORS never comes into it: this list only serves a
-# dev who bypasses the proxy, and there is no reason to widen a read grant to cover a port
-# collision that only affects the guard.
+# ONE list, used for two things: the CORS grant below and the cross-origin guard's dev
+# allowance (`_is_dev_origin`). An earlier version let the guard accept ANY loopback origin so
+# that a Vite port bump to 5174 kept working, and kept CORS narrow. A security review showed
+# the wide half was the hole: a page served on any local port could announce
+# `Sec-Fetch-Site: cross-site` and still be let through. Keeping the two in step means the
+# guard is exactly as permissive as CORS and no more.
+#
+# The cost is a port bump: `npm run dev` on 5174 gets a 403 from the guard. The documented dev
+# setup does not hit that, because Vite proxies /api and `changeOrigin` defaults to false, so
+# the backend sees the request as same-origin whatever port Vite landed on. Only a dev who
+# bypasses the proxy and points a browser straight at the backend needs this list, and they
+# can use 5173. A frozen build never reaches any of it.
 _DEV_CORS_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
 
 

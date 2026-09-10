@@ -35,13 +35,17 @@ It runs entirely on your machine. Conversions happen locally, and optional cloud
   paste a URL, or paste raw text.
 - **Batch conversion:** convert many files at once and download everything as a single
   `.md` or a `.zip`.
-- **Live preview:** see rendered Markdown and the raw source side by side, copy with one
+- **Live preview:** switch between the rendered Markdown and the raw source, copy with one
   click, or save to disk.
 - **Optional AI image captions:** bring your own Claude or Azure key to describe images
   inside documents.
 - **Light / dark / system themes** and keyboard shortcuts (Ctrl+Enter to convert).
 - **Self-updating:** the app checks GitHub for new releases and can update itself.
-- **Private by default:** runs locally; no telemetry, no account required.
+- **Private by default:** conversions run on your machine, there is no telemetry and no
+  account. The only servers Omnivert contacts on its own are GitHub (for new Omnivert
+  releases) and PyPI (to see whether a newer conversion engine exists); both checks can be
+  turned off in Settings. Your documents are never uploaded unless you switch on a cloud
+  option and supply your own key.
 
 ## Install
 
