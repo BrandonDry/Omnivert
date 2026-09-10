@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-10
+
 ### Security
 
 - **Redirects bypassed the URL guard.** The guard validated the URL you typed, then handed
@@ -41,11 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed a dead `asset_host_allowed` helper that referenced an undefined constant and would
   have raised `NameError` the moment anyone called it. It read like the asset gate and was
   not one.
-
-## [0.1.5] - 2026-09-10
-
-### Fixed
-
 - **Image captioning now works on a clean install.** The "Describe images with Claude"
   toggle always failed with *"The 'openai' package is required for image captioning but is
   not installed"*, because `openai` is not pulled in by the conversion engine under any
