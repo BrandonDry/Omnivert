@@ -16,7 +16,13 @@ import threading
 import pytest
 
 from omnivert import settings as settings_module
-from omnivert.conversion import _ENGINE_CONFIG_KEYS, ConversionService, service
+from omnivert.conversion import (
+    _ENGINE_CONFIG_KEYS,
+    _ENGINE_OPTION_FIELDS,
+    _engine_cache,
+    ConversionService,
+    service,
+)
 from omnivert.schemas import ConvertOptions
 
 
@@ -30,6 +36,29 @@ def test_engine_config_keys_cover_every_setting_construct_reads():
         "_construct reads settings that the cache signature ignores, so changing them in "
         f"Settings would reuse a stale engine: {sorted(missing)}"
     )
+
+
+def test_engine_option_fields_cover_every_option_construct_reads():
+    """The cfg half of this invariant is not the whole invariant.
+
+    ``_construct`` reads ConvertOptions fields as well as settings, and an earlier version
+    of this module only scanned ``cfg``. A review demonstrated the gap: adding a branch on
+    ``opts.keep_data_uris`` to ``_construct`` left every test passing while the user
+    toggling it would have been handed the previous engine.
+    """
+    source = inspect.getsource(ConversionService._construct)
+    read_fields = set(re.findall(r"opts\.(\w+)", source))
+
+    missing = read_fields - set(_ENGINE_OPTION_FIELDS)
+    assert not missing, (
+        "_construct reads ConvertOptions fields that the cache signature ignores, so "
+        f"toggling them would reuse a stale engine: {sorted(missing)}"
+    )
+
+
+def test_engine_option_fields_are_real_convert_options():
+    unknown = set(_ENGINE_OPTION_FIELDS) - set(ConvertOptions.model_fields)
+    assert not unknown, f"_ENGINE_OPTION_FIELDS names fields that do not exist: {sorted(unknown)}"
 
 
 def test_engine_config_keys_are_all_real_settings():
@@ -125,3 +154,61 @@ def test_file_types_reject_unknown_values_with_a_helpful_message():
 def test_empty_file_type_list_means_no_restriction():
     assert ConversionService._docintel_file_types([]) is None
     assert ConversionService._docintel_file_types(["", "  "]) is None
+
+
+# --- engine release -------------------------------------------------------------------
+
+def test_batch_reuses_one_engine_then_releases_it(isolated_settings):
+    """Caching without releasing would trade a speed problem for a memory one.
+
+    A threadpool thread lives as long as the process, so an engine left in its thread-local
+    is pinned forever. Each is ~7.8 MB (magika builds its own ONNX InferenceSession per
+    instance) and anyio runs up to 40 workers.
+    """
+    opts = ConvertOptions()
+    with service.batch():
+        inside = service._build(opts)
+        assert service._build(opts) is inside, "engine should be reused within a batch"
+
+    assert getattr(_engine_cache, "entry", None) is None, "engine was not released"
+
+    with service.batch():
+        assert service._build(opts) is not inside, "a released engine must not come back"
+
+
+def test_batch_releases_even_when_the_body_raises(isolated_settings):
+    opts = ConvertOptions()
+    with pytest.raises(ValueError):
+        with service.batch():
+            service._build(opts)
+            raise ValueError("conversion blew up")
+    assert getattr(_engine_cache, "entry", None) is None
+
+
+def test_every_conversion_route_releases_its_engine():
+    """Any /api/convert route that forgets service.batch() reintroduces the leak."""
+    import ast
+
+    from omnivert import main
+
+    tree = ast.parse(inspect.getsource(main))
+    checked = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        routes = [
+            d.args[0].value
+            for d in node.decorator_list
+            if isinstance(d, ast.Call)
+            and d.args
+            and isinstance(d.args[0], ast.Constant)
+            and isinstance(d.args[0].value, str)
+            and d.args[0].value.startswith("/api/convert/")
+        ]
+        if not routes:
+            continue
+        checked.append(routes[0])
+        body = ast.dump(node)
+        assert "batch" in body, f"route {routes[0]} does not wrap its work in service.batch()"
+
+    assert len(checked) >= 5, f"expected to find every convert route, found {checked}"

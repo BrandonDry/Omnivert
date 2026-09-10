@@ -52,7 +52,12 @@ dependencies = [
   # (not even [all]). It only calls `client.chat.completions.create` on a client we hand it.
   # Without this line a clean install has a "Describe images with Claude" toggle that can
   # never succeed.
-  "openai",
+  #
+  # Bounded to one major, matching how the engine itself is pinned: releases resolve
+  # dependencies at build time, so an unbounded requirement lets two builds of the same tag
+  # bundle different majors, and a major that changes the chat-completions request shape
+  # would break captioning with no source change to point at. Verified against 3.11.0.
+  "openai>=3,<4",
 ]
 
 [project.optional-dependencies]

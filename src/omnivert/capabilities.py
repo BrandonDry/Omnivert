@@ -9,9 +9,15 @@ The format table and the dependency list are both derived from the engine versio
    earlier version of this table under-reported ``.markdown``, ``.text``, ``.jsonl`` and
    ``.atom``, and advertised YouTube support that the pin cannot deliver.
 2. Every dependency listed here is one our pin actually installs, so anything reported
-   ``missing`` is a genuinely broken install rather than a normal state. That matters on
-   Windows, where a cloud-sync layer can dehydrate files and break imports for packages that
-   are nominally present (see CLAUDE.md's environment caveat).
+   ``missing`` is a genuinely broken install rather than a normal state.
+
+   Note the limit of that check: ``_is_importable`` uses ``importlib.util.find_spec``, which
+   locates a module without importing it. It therefore catches a dependency that is absent,
+   but NOT one that is present and broken. The cloud-sync dehydration failure in CLAUDE.md's
+   environment caveat is the second kind, so this dialog will still report such an install as
+   healthy and the conversion will fail later. Detecting that would mean actually importing
+   pandas, the Azure SDKs and onnxruntime on every capabilities call, which is seconds of
+   startup cost for a rare failure; the trade is deliberate.
 
 ``_OPTIONAL_DEPS`` must stay in sync with the ``copy_metadata`` list in
 ``packaging/app.spec``, or the frozen build reports ``None`` for every version.
@@ -35,8 +41,13 @@ _OPTIONAL_DEPS = [
     ("pdfminer.six", "pdfminer", "PDF"),
     ("pdfplumber", "pdfplumber", "PDF (tables/layout)"),
     ("mammoth", "mammoth", "Word .docx"),
-    ("lxml", "lxml", "Word .docx"),
+    # lxml gates two converters, and neither is obvious. markitdown never imports it: the
+    # .docx path reaches it through BeautifulSoup(features="xml") in
+    # converter_utils/docx/pre_process.py, a feature bs4 can only serve via lxml. It is
+    # also a hard requirement of python-pptx, along with Pillow.
+    ("lxml", "lxml", "Word .docx and PowerPoint .pptx"),
     ("python-pptx", "pptx", "PowerPoint .pptx"),
+    ("Pillow", "PIL", "PowerPoint .pptx images"),
     ("openpyxl", "openpyxl", "Excel .xlsx"),
     ("xlrd", "xlrd", "Excel .xls"),
     ("pandas", "pandas", "Excel tables"),
@@ -55,7 +66,7 @@ _OPTIONAL_DEPS = [
 _FORMAT_SPECS = [
     ("PDF", [".pdf"], ["pdfminer.six", "pdfplumber"], None),
     ("Word", [".docx"], ["mammoth", "lxml"], None),
-    ("PowerPoint", [".pptx"], ["python-pptx"], None),
+    ("PowerPoint", [".pptx"], ["python-pptx", "lxml", "Pillow"], None),
     ("Excel", [".xlsx"], ["openpyxl", "pandas"], None),
     ("Excel 97-2003", [".xls"], ["xlrd", "pandas"], None),
     ("Outlook message", [".msg"], ["olefile"], None),

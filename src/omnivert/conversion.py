@@ -10,6 +10,7 @@ import json
 import os
 import threading
 import warnings
+from contextlib import contextmanager
 from typing import Any, Dict, List, Tuple
 
 from markitdown import MarkItDown as Engine, StreamInfo
@@ -70,17 +71,32 @@ _ENGINE_CONFIG_KEYS = (
     "cu_file_types",
 )
 
-# Engine construction is not free: ``MarkItDown.__init__`` builds a ``magika.Magika()`` and
-# registers ~20 converters, measured at ~36 ms per instance on the pinned engine. (The ONNX
-# model itself is cached by magika at module level, so this is registration cost, not a model
-# load per file. Measure before "optimising" further.) The old code built one engine per
-# FILE, so a 1000-file folder batch spent ~36 s doing nothing but rebuilding it.
+# The ConvertOptions fields that affect construction. Same contract as the keys above: a
+# construction-affecting option missing here means a stale engine survives the user
+# toggling it. Kept as a constant so ``_signature`` and the test read the same list; when
+# they were inline in ``_signature`` the test could only check the cfg half, and a review
+# proved an option added to ``_construct`` slipped through silently.
+_ENGINE_OPTION_FIELDS = ("enable_plugins", "describe_images", "azure_backend")
+
+# Engine construction is not free. ``MarkItDown.__init__`` builds a ``magika.Magika()`` and
+# registers ~20 converters: measured at ~36 ms AND ~7.8 MB per instance on the pinned engine.
+# magika does not share one ONNX session across instances, it builds a fresh
+# ``InferenceSession`` every time, so that memory is per engine and never amortised. (An
+# earlier version of this comment claimed the opposite, inferred from the timing alone. It
+# was wrong. Measure both time and memory before changing this.)
 #
-# Cache per *thread* rather than globally: FastAPI runs these sync routes in a threadpool, so
-# a batch runs start-to-finish on one thread and hits the cache for every file after the
-# first, while two concurrent requests land on different threads and never share an engine.
-# That last part is the point: a shared engine would also share its ``requests.Session``,
-# which is not thread-safe.
+# The old code built one engine per FILE, so a 1000-file folder batch spent ~36 s doing
+# nothing but rebuilding it. Two constraints shape the fix:
+#
+#   1. Cache per *thread*, not globally. These sync routes run on the anyio threadpool, so a
+#      batch runs start-to-finish on one thread and hits the cache for every file after the
+#      first, while two concurrent requests land on different threads and never share an
+#      engine. That matters: an engine holds a ``requests.Session``, which is not thread-safe.
+#   2. Release at the end of each request. Worker threads outlive the requests that ran on
+#      them, so a thread-local alone lets each of anyio's 40 workers pin ~7.8 MB: a ceiling
+#      near 340 MB. anyio does prune threads idle for 10 s, so it is a high-water mark
+#      rather than a true leak, but trading a speed problem for a memory one is not a fix.
+#      ``ConversionService.batch()`` frees it, and every conversion route must use it.
 _engine_cache = threading.local()
 
 
@@ -98,15 +114,27 @@ class ConversionService:
         """
         material = json.dumps(
             {
-                "enable_plugins": opts.enable_plugins,
-                "describe_images": opts.describe_images,
-                "azure_backend": opts.azure_backend,
+                "opts": {f: getattr(opts, f) for f in _ENGINE_OPTION_FIELDS},
                 "cfg": {k: cfg.get(k) for k in _ENGINE_CONFIG_KEYS},
             },
             sort_keys=True,
             default=str,
         )
         return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    @contextmanager
+    def batch():
+        """Reuse one engine for every conversion inside this block, then release it.
+
+        Every conversion *request* must be wrapped in this. Without the release the
+        thread-local cache is never reclaimed, because threadpool threads outlive the
+        requests that used them. See the note above ``_engine_cache``.
+        """
+        try:
+            yield
+        finally:
+            _engine_cache.entry = None
 
     def _build(self, opts: ConvertOptions) -> Engine:
         cfg = settings_module.load()

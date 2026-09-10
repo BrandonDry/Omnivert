@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`packaging/app.spec` metadata list realigned** with `capabilities._OPTIONAL_DEPS`. It had
   drifted in both directions, so the frozen build reported no version for several bundled
   dependencies. A test now enforces the sync that CLAUDE.md only asked for in prose.
+- **The Azure file-type fields could only ever hold one extension.** Both the new Document
+  Intelligence field and the existing Content Understanding one derived their displayed text
+  from the parsed array, so typing a comma re-rendered the field without it and the separator
+  was swallowed. They now keep the raw text and parse alongside it.
+- **URL guard:** carrier-grade NAT (`100.64.0.0/10`) was not treated as non-public, and four
+  URL shapes a user can type (out-of-range port, non-numeric port, unclosed IPv6 bracket,
+  over-long hostname label) raised out of the guard as a 500 instead of returning the
+  structured error every other conversion failure returns.
+- **Download filenames** are taken from a converted document's `<title>`, and a raw CR or LF
+  in one reached the `Content-Disposition` response header verbatim. Control characters are
+  now stripped in both the filename builder and the header builder.
 
 ### Changed
 
@@ -28,10 +39,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   roughly 36 ms each; it is now cached per worker thread, so a folder batch pays that cost
   once instead of once per file (measured: 36 ms/file to 2.4 ms/file on small inputs). The
   cache is thread-local rather than global because an engine holds a `requests.Session`,
-  which is not thread-safe.
+  which is not thread-safe, and is released at the end of each request: worker threads
+  outlive the requests that ran on them, and each retained engine pins its own ONNX session
+  at roughly 8 MB.
 - Formats whose gating dependency is missing are now shown as unavailable in the
   Capabilities dialog, and name the dependency they are waiting on, instead of being
   advertised as though they worked.
+- `fastapi` is floored at `>=0.132` and `openai` bounded to one major. Both were previously
+  unbounded, which let a build resolve a FastAPI old enough to parse a body with no
+  `Content-Type` as JSON (a cross-origin request needs no CORS preflight to send one).
 - Removed the YouTube capability badge and URL-tab notice. The bundled pin does not include
   the `youtube-transcription` extra, and a frozen build cannot install it, so the indicator
   could never read anything but "not installed".
@@ -40,9 +56,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Azure Document Intelligence file-type filter**, matching the one Content Understanding
   already had, so a specific set of extensions can be routed to the cloud backend.
-- A `pytest` suite covering settings redaction, the SSRF URL guard, batch packaging, and the
-  engine-cache invariants. `tests/engine_smoke.py` is unchanged and still runs as the
-  auto-bump gate.
+- A `pytest` suite (94 tests) covering settings redaction, the SSRF URL guard, batch
+  packaging, and the engine-cache invariants. `tests/engine_smoke.py` is unchanged and still
+  runs as the auto-bump gate.
+- **A CI workflow.** Pull requests previously ran only dependency review and the labeler: no
+  tests, no typecheck, no lint. `ci.yml` now runs the Python suite on 3.11 and 3.12 plus the
+  frontend typecheck, build and lint on every push and pull request, and both `release.yml`
+  and `engine-update.yml` run the suite before building anything.
 
 ## [0.1.4] - 2026-07-30
 

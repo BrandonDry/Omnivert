@@ -179,10 +179,11 @@ The installer is written to `dist/installer/`. Release automation is documented 
   Python-version caveats. YouTube transcript extraction is therefore **not** available in
   installed builds, and the UI no longer advertises it. Running from a checkout, you can
   still add a compatible `youtube-transcript-api` to the environment yourself.
-- The Capabilities dialog marks a format **unavailable** when the dependency that gates it
-  fails to import, and names the dependency. Every dependency it lists ships with Omnivert,
+- The Capabilities dialog marks a format **unavailable** when a dependency that gates it
+  cannot be found, and names the dependency. Every dependency it lists ships with Omnivert,
   so anything reported missing means a damaged install rather than a normal state: reinstall
-  to repair it.
+  to repair it. Note it detects a *missing* dependency, not a present-but-broken one, so a
+  conversion can still fail with a healthy-looking dialog.
 - Claude image captions and Azure Document Intelligence/Content Understanding require valid
   keys in Settings. The API redacts stored secrets on read.
 

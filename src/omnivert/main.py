@@ -162,9 +162,12 @@ def convert_file(
     # conversion below doesn't block the event loop (read uploads synchronously too).
     opts = _parse_options(options)
     results: List[ConversionResult] = []
-    for upload in files:
-        data = upload.file.read()
-        results.append(service.convert_bytes(data, upload.filename or "upload", opts))
+    # service.batch() reuses one engine across the whole request and frees it afterwards.
+    # Every conversion route needs it: see the note above _engine_cache in conversion.py.
+    with service.batch():
+        for upload in files:
+            data = upload.file.read()
+            results.append(service.convert_bytes(data, upload.filename or "upload", opts))
     return BatchResult(batch_id=jobs.register(results), results=results)
 
 
@@ -189,7 +192,8 @@ def convert_folder(req: FolderConvertRequest) -> BatchResult:
             "Pick a narrower folder.",
         )
 
-    results = [_convert_path(p, p.relative_to(root).as_posix(), req.options) for p in files]
+    with service.batch():
+        results = [_convert_path(p, p.relative_to(root).as_posix(), req.options) for p in files]
     return BatchResult(batch_id=jobs.register(results), results=results)
 
 
@@ -198,22 +202,24 @@ def convert_paths(req: PathsConvertRequest) -> BatchResult:
     if not req.paths:
         raise HTTPException(status_code=422, detail="No paths provided.")
     results: List[ConversionResult] = []
-    for raw in req.paths:
-        # By design / path-injection (see convert_folder): these paths are the local files
-        # the user selected to convert; reading them is the feature. Guarded by _guard_host.
-        path = Path(raw).expanduser()
-        if not path.is_file():
-            results.append(
-                ConversionResult(
-                    filename=path.name or raw,
-                    ok=False,
-                    error=f"File not found: {raw}",
-                    error_kind="not_found",
-                    remediation="The file may have moved or been deleted.",
+    with service.batch():
+        for raw in req.paths:
+            # By design / path-injection (see convert_folder): these paths are the local
+            # files the user selected to convert; reading them is the feature. Guarded by
+            # _guard_host.
+            path = Path(raw).expanduser()
+            if not path.is_file():
+                results.append(
+                    ConversionResult(
+                        filename=path.name or raw,
+                        ok=False,
+                        error=f"File not found: {raw}",
+                        error_kind="not_found",
+                        remediation="The file may have moved or been deleted.",
+                    )
                 )
-            )
-            continue
-        results.append(_convert_path(path, path.name, req.options))
+                continue
+            results.append(_convert_path(path, path.name, req.options))
     return BatchResult(batch_id=jobs.register(results), results=results)
 
 
@@ -360,12 +366,14 @@ def app_updates_status() -> UpdateStatus:
 def convert_url(req: UrlConvertRequest) -> ConversionResult:
     if not req.url.strip():
         raise HTTPException(status_code=422, detail="A URL is required.")
-    return service.convert_url(req.url.strip(), req.options)
+    with service.batch():
+        return service.convert_url(req.url.strip(), req.options)
 
 
 @app.post("/api/convert/text", response_model=ConversionResult)
 def convert_text(req: TextConvertRequest) -> ConversionResult:
-    return service.convert_text(req.content, req.extension, req.charset, req.options)
+    with service.batch():
+        return service.convert_text(req.content, req.extension, req.charset, req.options)
 
 
 # --- settings ------------------------------------------------------------------------

@@ -45,7 +45,8 @@ import type { ConversionResult, ConvertOptions } from "@/lib/types"
 
 type Mode = "file" | "folder" | "url" | "text"
 
-// Mirrors what the pinned engine accepts for pasted text (see capabilities._FORMAT_SPECS).
+// A shortlist of what makes sense to paste, not the engine's full accepted set: ".text"
+// and ".markdown" are omitted because they route to the same converter as ".txt" and ".md".
 const TEXT_EXTENSIONS = [".txt", ".md", ".html", ".csv", ".json", ".jsonl", ".xml", ".rss", ".atom"]
 
 interface Props {

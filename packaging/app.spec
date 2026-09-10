@@ -135,6 +135,7 @@ for dist_name in (
     "mammoth",
     "lxml",
     "python-pptx",
+    "Pillow",
     "openpyxl",
     "xlrd",
     "pandas",
@@ -156,6 +157,11 @@ for package in (
     "webview",
     "magika",
     "onnxruntime",
+    # claude_shim does `from openai import OpenAI` inside a function. PyInstaller's static
+    # analysis normally traces that, but openai resolves parts of itself lazily, and this
+    # is the import behind the headline captioning fix, so it is collected explicitly
+    # rather than left to bytecode scanning.
+    "openai",
 ):
     hiddenimports += safe_collect_submodules(package)
 
