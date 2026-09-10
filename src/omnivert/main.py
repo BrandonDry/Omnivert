@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -63,6 +65,145 @@ app = FastAPI(title="Omnivert", version=APP_VERSION)
 # as the same user. Loopback names a request may legitimately carry as its Host header.
 _ALLOWED_API_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
+_DEV_MODE = not getattr(sys, "frozen", False)
+
+# Origins the Vite dev server may appear as. In dev the browser loads the UI from Vite and
+# Vite proxies /api here (frontend/vite.config.ts), so a legitimate dev request arrives naming
+# the dev server's origin rather than this one.
+#
+# Any loopback port, not just 5173: Vite ships with strictPort false, so it silently moves to
+# 5174 when 5173 is taken, and `npm run dev -- --host` moves it too. Pinning one port would
+# turn a port collision into a wall of 403s reading "only accepts requests from the Omnivert
+# window", which is a security-shaped message for a problem that is not one. Running a dev
+# server already means trusting what is listening on loopback, and a frozen build never
+# reaches this at all. What is NOT covered: browsing a `--host` dev server through the
+# machine's LAN address instead of localhost. Use localhost.
+
+# The origins the CORS middleware answers for, which is a NARROWER list than the guard's
+# pattern above, and deliberately so. CORS grants a page the right to READ responses; the
+# guard only decides whether a request runs. The documented dev setup proxies /api through
+# Vite, so the browser sees same-origin and CORS never comes into it: this list only serves a
+# dev who bypasses the proxy, and there is no reason to widen a read grant to cover a port
+# collision that only affects the guard.
+_DEV_CORS_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
+
+
+def _is_dev_origin(origin: str) -> bool:
+    """True only for the Vite dev server's own origins, and only outside a frozen build.
+
+    This deliberately does NOT match any loopback origin. It used to, and a security review
+    showed that was the hole rather than the guard: a page served on ANY local port could
+    announce ``Sec-Fetch-Site: cross-site`` and still be let through, because a dev origin
+    overrode the check below. Measured at the time: 200 for a hostile
+    ``Origin: http://localhost:3000``. Scoping this to the two origins the CORS policy
+    already grants means the cross-origin guard is exactly as permissive as CORS and no more.
+
+    Note the documented dev workflow does not need this at all. ``frontend/vite.config.ts``
+    proxies ``/api`` to the backend, and Vite's ``changeOrigin`` defaults to false, so the
+    backend sees Host and Origin both as ``localhost:5173`` and ``_origin_is_own`` matches
+    without any allowance. Verified by running the proxy shape with this function forced to
+    return False: still 200. It survives only for a dev who bypasses the proxy and points a
+    browser straight at port 8765.
+    """
+    return _DEV_MODE and origin in _DEV_CORS_ORIGINS
+
+# Sec-Fetch-Site values that mean "this request did not come from another site". "none" is a
+# user-initiated load: the address bar, a bookmark, or the desktop window opening its own
+# URL. "same-site" is deliberately absent: on loopback it would admit any page served by any
+# other local port, and the bundled UI never produces it.
+_SAME_SITE_FETCH = {"same-origin", "none"}
+
+
+def _split_host_port(host_header: str) -> Tuple[str, int]:
+    """Split a Host header into a lowercase hostname and a port, defaulting to 80.
+
+    Bracketed IPv6 needs its own branch: "[::1]:8765" does not split on the last colon the
+    way "127.0.0.1:8765" does.
+    """
+    host = (host_header or "").strip()
+    if host.startswith("["):  # bracketed IPv6, optionally with :port -> [::1]:8765
+        hostname, _, rest = host[1:].partition("]")
+        port_text = rest.lstrip(":")
+    else:  # host[:port] -> drop the port if present
+        hostname, _, port_text = host.rpartition(":")
+        if not hostname:  # no colon at all, so rpartition put everything in port_text
+            hostname, port_text = port_text, ""
+    try:
+        port = int(port_text) if port_text else 80
+    except ValueError:
+        port = 80
+    return hostname.lower(), port
+
+
+def _origin_is_own(origin: str, host_header: str) -> bool:
+    """True when ``origin`` names this very server.
+
+    Matched on loopback name plus port rather than by string equality, so a window that
+    loaded http://localhost:<port> and a Host header of 127.0.0.1:<port> (or the reverse)
+    still count as the same app. That relaxation grants nothing: only this app answers on
+    that port, and anything that could take the port is already running as the user.
+    """
+    try:
+        parsed = urlparse(origin)
+        origin_port = parsed.port or 80
+    except ValueError:  # a malformed port raises rather than parsing
+        return False
+    if parsed.scheme != "http":
+        return False
+    if "@" in parsed.netloc:
+        # urlparse reads http://evil.example@127.0.0.1:8765 as hostname 127.0.0.1. No browser
+        # serialises an Origin with userinfo in it, so anything that does is not a browser
+        # and has no business being treated as this app's own window.
+        return False
+    if (parsed.hostname or "").lower() not in _ALLOWED_API_HOSTS:
+        return False
+    hostname, port = _split_host_port(host_header)
+    return hostname in _ALLOWED_API_HOSTS and origin_port == port
+
+
+def _refuse_cross_site() -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content={"detail": "This local API only accepts requests from the Omnivert window."},
+    )
+
+
+@app.middleware("http")
+async def _guard_cross_origin(request: Request, call_next):
+    """Reject requests a browser tells us came from another site.
+
+    _guard_host closes DNS rebinding and nothing else. A page on any origin can still address
+    http://127.0.0.1:<port> directly, and the Host header is then a loopback name the guard
+    has to allow, because that is exactly how the app's own window talks to the API. The
+    attacker cannot read the reply, but reading was never the point: multipart/form-data is
+    CORS-safelisted, so the POST goes out with no preflight to refuse, and /api/convert/file
+    runs with attacker-chosen options that spend the user's Claude key (describe_images) or
+    Azure keys (azure_backend) and load installed plugins (enable_plugins), while
+    /api/pick-files and /api/pick-folder pop native dialogs over their desktop. Verified: it
+    returned 200 and did the work.
+
+    Two headers say where a request came from, and either one on its own is enough to refuse.
+    Sec-Fetch-Site is sent by Chromium 76+, Firefox 90+ and Safari 16.4+, and script cannot
+    set it. Origin is sent on every cross-origin request and on every non-GET request, and has
+    been since roughly 2016.
+
+    A request carrying NEITHER is allowed through, which is a decision rather than an
+    oversight: curl, the update checker and the test suite send neither, and no browser old
+    enough to send neither on a cross-site POST is still in service, so the shape that has the
+    side effects is covered by Origin alone even where Sec-Fetch-Site is missing. What the
+    fail-open leaves is a cross-site GET from a pre-2019 browser, which can only reach
+    responses it was already unable to read.
+    """
+    site = request.headers.get("sec-fetch-site", "").strip().lower()
+    origin = request.headers.get("origin", "").strip()
+    dev_origin = _is_dev_origin(origin)
+
+    if site and site not in _SAME_SITE_FETCH and not dev_origin:
+        return _refuse_cross_site()
+    if origin and not dev_origin and not _origin_is_own(origin, request.headers.get("host", "")):
+        return _refuse_cross_site()
+    return await call_next(request)
+
 
 @app.middleware("http")
 async def _guard_host(request: Request, call_next):
@@ -75,21 +216,16 @@ async def _guard_host(request: Request, call_next):
     A rebound request still carries the attacker's hostname in its Host header, so refusing
     non-loopback hosts closes THAT vector. It does not, and cannot, stop a page addressing
     http://127.0.0.1:<port> directly: the Host is then a loopback name and must be allowed,
-    since that is how the bundled UI itself talks to the API. What limits the direct case is
-    the absence of a cross-origin allow header (the page cannot read any response) and the
-    fastapi>=0.132 floor (a JSON route rejects a body sent with a CORS-simple content type,
-    so it needs a preflight this app refuses). SECURITY.md states that residual for users.
+    since that is how the bundled UI itself talks to the API. That case is _guard_cross_origin's
+    job, above.
 
     The bundled UI always talks to http://127.0.0.1:<port>, and the Vite dev proxy forwards
     as localhost, so legitimate traffic is unaffected. Requests with no Host header (rare
     non-browser clients) are allowed through: a browser-based attacker cannot omit it."""
     host = request.headers.get("host", "").strip()
     if host:
-        if host.startswith("["):  # bracketed IPv6, optionally with :port -> [::1]:8765
-            hostname = host[1:].split("]", 1)[0]
-        else:  # host[:port] -> drop the port if present
-            hostname = host.rsplit(":", 1)[0]
-        if hostname.lower() not in _ALLOWED_API_HOSTS:
+        hostname, _ = _split_host_port(host)
+        if hostname not in _ALLOWED_API_HOSTS:
             return JSONResponse(
                 status_code=403,
                 content={"detail": "This local API only accepts loopback requests."},
@@ -116,13 +252,10 @@ async def _limit_request_size(request: Request, call_next):
 
 # CORS is only needed for the Vite dev server (5173) talking to this API cross-origin.
 # In a frozen build the UI is served same-origin from "/", so CORS is unnecessary.
-if not getattr(sys, "frozen", False):
+if _DEV_MODE:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-        ],
+        allow_origins=list(_DEV_CORS_ORIGINS),
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -360,7 +493,9 @@ def app_updates_check() -> AppUpdateInfo:
 
 @app.post("/api/app/updates/apply", response_model=UpdateStatus)
 def app_updates_apply(req: AppUpdateApplyRequest) -> UpdateStatus:
-    return UpdateStatus(**app_updates.start_app_update(req.download_url))
+    # req is accepted and deliberately not read: start_app_update resolves the asset from the
+    # configured repo itself. The body used to choose what this endpoint downloaded and ran.
+    return UpdateStatus(**app_updates.start_app_update())
 
 
 @app.get("/api/app/updates/status", response_model=UpdateStatus)

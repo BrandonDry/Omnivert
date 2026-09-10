@@ -14,9 +14,12 @@ import re
 import threading
 
 import pytest
+import requests
 
 from omnivert import settings as settings_module
+from omnivert import url_guard
 from omnivert.conversion import (
+    _classify,
     _ENGINE_CONFIG_KEYS,
     _ENGINE_OPTION_FIELDS,
     _engine_cache,
@@ -134,6 +137,53 @@ def test_changing_a_secret_still_changes_the_signature(isolated_settings):
     cfg_a = dict(settings_module.DEFAULTS, claude_api_key="key-one")
     cfg_b = dict(settings_module.DEFAULTS, claude_api_key="key-two")
     assert ConversionService._signature(cfg_a, opts) != ConversionService._signature(cfg_b, opts)
+
+
+# --- the engine fetches through the guarded session -----------------------------------
+
+def test_the_engine_is_given_the_guarded_session(isolated_settings):
+    """The URL guard is only load-bearing if the engine fetches through it.
+
+    Left to itself ``MarkItDown.__init__`` builds a plain ``requests.Session``, and
+    ``convert_uri`` then follows redirects anywhere with no timeout, so the guard only ever
+    saw the URL the user typed. Reaching into ``_requests_session`` is reading a private
+    attribute of the engine on purpose: it is the only place the wiring is observable, and a
+    version of the engine that renames it should fail here rather than silently stop being
+    guarded.
+    """
+    engine = service._construct(settings_module.load(), ConvertOptions())
+
+    adapter = engine._requests_session.get_adapter("https://example.com/")
+    assert isinstance(adapter, url_guard._GuardedAdapter)
+
+
+def test_a_blocked_redirect_reports_the_same_error_kind_as_a_blocked_url():
+    """The user typed one URL, so they should get one explanation whichever hop was refused."""
+    kind, remediation = _classify(url_guard.BlockedUrlError("resolves to 127.0.0.1"))
+
+    assert kind == "blocked_url"
+    assert "public http(s) URL" in remediation
+
+
+@pytest.mark.parametrize(
+    "exc, kind",
+    [
+        (requests.exceptions.ConnectTimeout("slow"), "fetch_timeout"),
+        (requests.exceptions.ReadTimeout("slow"), "fetch_timeout"),
+        (requests.exceptions.TooManyRedirects("looping"), "too_many_redirects"),
+    ],
+)
+def test_the_failures_the_guarded_session_introduced_are_explained(exc, kind):
+    """Both of these became reachable only when the session gained a timeout and a hop cap.
+
+    Before it there was no timeout and requests' own 30-hop default, so neither could surface.
+    Unclassified they fall through to "Unexpected error during conversion", which tells a user
+    with a slow site or a long redirect chain nothing about what to do.
+    """
+    classified, remediation = _classify(exc)
+
+    assert classified == kind
+    assert remediation != "Unexpected error during conversion."
 
 
 # --- cloud backend file-type parsing -------------------------------------------------

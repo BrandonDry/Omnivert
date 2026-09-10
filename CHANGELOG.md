@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Redirects bypassed the URL guard.** The guard validated the URL you typed, then handed
+  the original string to the engine, which followed redirects with no limit and no timeout.
+  A public URL answering `302 Location: http://127.0.0.1:<port>/api/settings` reached the
+  app's own API on hop two, and every target the guard exists to refuse was one redirect
+  away. Conversion now runs through a session whose adapter re-checks every hop, caps the
+  chain, and applies a connect/read timeout. Reproduced before and after.
+- **A website could make Omnivert work on its behalf.** The loopback Host guard closes DNS
+  rebinding only; a page can address `127.0.0.1` directly and the Host is then a loopback
+  name that must be allowed. Because `multipart/form-data` is CORS-safelisted, a cross-origin
+  POST needed no preflight, so `/api/convert/file` ran with attacker-chosen options that
+  spend your configured Claude or Azure keys, and the native pickers popped dialogs over your
+  desktop. Verified at HTTP 200 before the fix, 403 after. A new middleware refuses requests a
+  browser reports as cross-site, and the dev allowance is scoped to the Vite origins CORS
+  already grants rather than any loopback port.
+- **`/api/app/updates/apply` downloaded and executed a URL from the request body**, with no
+  allowlist, no scheme restriction, and a checksum that was skipped whenever the filename was
+  absent from the release's `SHA256SUMS`. The endpoint now ignores the body entirely and
+  resolves the asset itself, pinned to this build's own repository for both the installer and
+  the checksum file, with a missing or mismatched checksum fatal. A host allowlist would not
+  have been enough: `app_repo` is a free-text setting, every GitHub account serves from
+  `github.com`, and a release's `SHA256SUMS` is written by whoever published it, so an
+  attacker's checksum matches an attacker's binary by construction.
+- The apply route also never checked `update_available`, so a same-origin POST would
+  re-download and launch the current release's installer on a machine already running it.
+
+### Fixed
+
+- A refused redirect target, a timeout, and an over-long redirect chain now report what
+  happened instead of "Unexpected error during conversion".
+- Removed a dead `asset_host_allowed` helper that referenced an undefined constant and would
+  have raised `NameError` the moment anyone called it. It read like the asset gate and was
+  not one.
+
 ## [0.1.5] - 2026-09-10
 
 ### Fixed

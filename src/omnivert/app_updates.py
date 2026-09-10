@@ -14,14 +14,44 @@ from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
 from . import gh
 from . import installer_update
 from . import settings as settings_module
 from .app_version import __version__ as APP_VERSION
+from .build_info import DEFAULT_APP_REPO
 
 # The distribution name the app is published under (Phase B packaging).
 APP_PACKAGE = "omnivert"
+
+
+def release_asset_prefix() -> str:
+    """The only URL prefix an asset this build will install may have.
+
+    Deliberately the repo this build was made from, not the repo in Settings. ``app_repo`` is
+    a free-text field the user can edit (and any client that can reach the API can write), so
+    a host-level "must be github.com" check does not say WHOSE release is being installed:
+    every GitHub account serves assets from github.com, and a release's SHA256SUMS is written
+    by whoever published that release, so the checksum matches an attacker's binary by
+    construction. Pointing Settings at a fork can therefore still CHECK for updates; only
+    installing is pinned. ``release.yml`` rewrites DEFAULT_APP_REPO to the repo it builds
+    from (``scripts/set_build_repo.py``), so a fork that ships its own releases updates from
+    its own, not from here.
+
+    This bounds provenance, not authenticity: it says the bytes came from this project's
+    releases, not that this project published them. That still needs a signed installer.
+    """
+    return f"https://github.com/{DEFAULT_APP_REPO}/releases/download/"
+
+
+def release_asset_allowed(url: str) -> bool:
+    """True when ``url`` is a release asset of the repo this build updates from.
+
+    A prefix test is safe here because the prefix ends inside a path GitHub controls: nobody
+    but ``DEFAULT_APP_REPO`` can serve a URL under ``github.com/<that repo>/releases/download/``.
+    """
+    return bool(url) and str(url).lower().startswith(release_asset_prefix().lower())
 
 _lock = threading.Lock()
 _state: Dict[str, object] = {
@@ -69,29 +99,56 @@ def _checksums_asset(release: dict) -> Optional[str]:
     return None
 
 
-def _expected_sha256(filename: str) -> Optional[str]:
-    """Best-effort lookup of ``filename``'s SHA-256 from the latest release's SHA256SUMS
-    asset (``<hex>  <filename>`` lines). Returns None if unavailable, and verification is then
-    skipped rather than blocking the update."""
-    repo = _repo()
-    if not repo:
-        return None
-    try:
-        rel = gh.get_json(f"https://api.github.com/repos/{repo}/releases/latest")
-        url = _checksums_asset(rel)
-        if not url:
-            return None
-        import urllib.request
+def _sha256_from_sums(text: str, filename: str) -> str:
+    """Pull ``filename``'s hash out of a SHA256SUMS body (``<hex>  <filename>`` lines).
 
-        with urllib.request.urlopen(url, timeout=30) as resp:
-            text = resp.read().decode("utf-8", "replace")
-    except Exception:
-        return None
+    Raises when the file is not listed. It used to return None there and the caller carried
+    on unverified, which meant the checksum only protected downloads that had volunteered to
+    be protected: any name absent from SHA256SUMS skipped the check entirely.
+    """
     for line in text.splitlines():
         parts = line.split()
         if len(parts) >= 2 and parts[-1].lstrip("*").lower() == filename.lower():
             return parts[0]
-    return None
+    raise RuntimeError(
+        f"The release's SHA256SUMS does not list {filename}, so the download cannot be "
+        "verified. Nothing was installed."
+    )
+
+
+def _expected_sha256(filename: str) -> str:
+    """Look up ``filename``'s SHA-256 in the latest release's SHA256SUMS asset.
+
+    Every failure raises. A checksum that can be skipped is not a check, and this one guards
+    an executable that gets launched.
+    """
+    repo = _repo()
+    if not repo:
+        raise RuntimeError("No update repository is configured, so nothing can be verified.")
+    try:
+        rel = gh.get_json(f"https://api.github.com/repos/{repo}/releases/latest")
+    except Exception as exc:  # noqa: BLE001 - reported to the UI as a refusal to install
+        raise RuntimeError(f"Couldn't read the release to verify the download: {exc}") from exc
+
+    url = _checksums_asset(rel)
+    if not url:
+        raise RuntimeError(
+            "This release publishes no SHA256SUMS, so the download cannot be verified."
+        )
+    if not release_asset_allowed(url):
+        # The checksums decide whether the installer runs, so they have to come from the same
+        # pinned repo the installer does. A SHA256SUMS fetched from anywhere else could simply
+        # list the hash of the attacker's own binary.
+        raise RuntimeError(f"The release's SHA256SUMS is not published by {DEFAULT_APP_REPO}.")
+
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            text = resp.read().decode("utf-8", "replace")
+    except Exception as exc:  # noqa: BLE001 - reported to the UI as a refusal to install
+        raise RuntimeError(f"Couldn't download the release's SHA256SUMS: {exc}") from exc
+    return _sha256_from_sums(text, filename)
 
 
 def check_for_app_update() -> Dict[str, object]:
@@ -169,11 +226,69 @@ def _packaged() -> bool:
         return False
 
 
-def start_app_update(download_url: Optional[str]) -> Dict[str, object]:
-    """Kick off the update in a daemon thread."""
+def start_app_update() -> Dict[str, object]:
+    """Kick off the update in a daemon thread.
+
+    Takes no URL. It used to take one from the request body, and the server downloaded and
+    launched whatever it named: an unauthenticated local endpoint that ran an attacker-chosen
+    executable, with no allowlist, no scheme restriction (urlopen honours ``file:`` and
+    ``ftp:``) and a checksum that could be sidestepped by naming a file SHA256SUMS did not
+    list. The asset is resolved here instead, and it must be a release of the repo this build
+    was made from (``release_asset_prefix``) before anything is fetched.
+    ``AppUpdateApplyRequest.download_url`` still exists so an already-installed frontend keeps
+    working, but nothing reads it.
+    """
+    # Claim the slot before the network call below, not after. Resolving the asset here means
+    # a GitHub round trip now sits between "is one already running" and "mark one running",
+    # and two clicks inside that window would launch two installers.
     with _lock:
         if _state["state"] == "running":
             return dict(_state)
+        _state.update(
+            {
+                "state": "running",
+                "message": "Checking for the latest release...",
+                "output": None,
+                "old_version": APP_VERSION,
+                "new_version": None,
+                "restart_required": False,
+            }
+        )
+
+    # The slot is claimed, so nothing below may escape as an exception. If it did, the state
+    # would stay "running" for the life of the process and every later apply would return the
+    # early "one is already running" answer, leaving the updater wedged with no way back short
+    # of restarting the app. _fail moves the state to error, which frees the slot.
+    try:
+        return _resolve_and_start()
+    except Exception as exc:  # noqa: BLE001 - a wedged updater is worse than an ugly message
+        return _fail(f"Couldn't start the update: {exc}")
+
+
+def _resolve_and_start() -> Dict[str, object]:
+    """Resolve the release asset and hand it to the right installer path.
+
+    Split out of ``start_app_update`` only so the slot claim there can wrap all of it in one
+    try. Never call this directly: it assumes the slot is already claimed.
+    """
+    info = check_for_app_update()
+    if info.get("error"):
+        return _fail(str(info["error"]))
+    if not info.get("configured"):
+        return _fail("No update repository is configured, so there is nothing to install.")
+    if not info.get("update_available"):
+        # The frontend already gates on this, but the frontend is not the security boundary:
+        # a same-origin POST straight to the route would otherwise re-download and launch the
+        # CURRENT release's installer on a machine already running it. Repo-pinned and
+        # checksum-verified, so this is not a code-execution hole, but an unauthenticated
+        # local trigger for an installer launch is still not something to leave open.
+        return _fail("This build is already up to date, so there is nothing to install.")
+    download_url = info.get("download_url")
+    if download_url and not release_asset_allowed(str(download_url)):
+        return _fail(
+            f"That release is not published by {DEFAULT_APP_REPO}, which is the repository "
+            "this build installs updates from. Nothing was downloaded."
+        )
 
     if is_frozen():
         if not download_url:
@@ -189,7 +304,9 @@ def start_app_update(download_url: Optional[str]) -> Dict[str, object]:
                     "restart_required": False,
                 }
             )
-        threading.Thread(target=_run_installer_update, args=(download_url,), daemon=True).start()
+        threading.Thread(
+            target=_run_installer_update, args=(str(download_url),), daemon=True
+        ).start()
         return get_status()
 
     if not download_url:
@@ -213,7 +330,10 @@ def start_app_update(download_url: Optional[str]) -> Dict[str, object]:
                 "restart_required": False,
             }
         )
-    threading.Thread(target=_run_install, args=(download_url,), daemon=True).start()
+    # The wheel path hands the URL to pip rather than downloading it here, so the guarantee
+    # is narrower than the installer path's: the allowlist above plus pip's own TLS
+    # verification, with no checksum. Named in SECURITY.md as the residual it is.
+    threading.Thread(target=_run_install, args=(str(download_url),), daemon=True).start()
     return get_status()
 
 
@@ -279,10 +399,10 @@ def _run_install(download_url: str) -> None:
 
 def _run_installer_update(download_url: str) -> None:
     try:
-        from urllib.parse import urlparse
-
         filename = Path(urlparse(download_url).path).name
-        expected = _expected_sha256(filename) if filename else None
+        if not filename:
+            raise RuntimeError("The release asset URL names no file.")
+        expected = _expected_sha256(filename)
         installer_path = installer_update.download_installer(download_url, expected)
         installer_update.launch_installer(installer_path)
         with _lock:

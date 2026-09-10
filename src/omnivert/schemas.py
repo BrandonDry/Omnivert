@@ -162,7 +162,12 @@ class AppUpdateInfo(BaseModel):
 
 
 class AppUpdateApplyRequest(BaseModel):
-    """Wheel asset URL to install (from the GitHub release)."""
+    """Accepted and ignored.
+
+    The server resolves the release asset itself (``app_updates.start_app_update``). This
+    field is kept only so a frontend built before that change still gets a 200 rather than a
+    validation error; sending it changes nothing. Do not wire it back up.
+    """
 
     download_url: Optional[str] = None
 
