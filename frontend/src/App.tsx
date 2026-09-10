@@ -33,7 +33,7 @@ function App() {
 
   // Quiet update checks for both the app and the engine (opt-out via Settings). Failures
   // (offline) just leave the badge off; a release the user chose to skip won't light it.
-  // Throttled so frequent window refocus can't spam the API — `force` bypasses it for the
+  // Throttled so frequent window refocus can't spam the API. `force` bypasses it for the
   // launch-time check.
   const runUpdateChecks = useCallback((s: Settings, force = false) => {
     if (s.auto_check_updates === false) return
@@ -81,7 +81,7 @@ function App() {
   }, [])
 
   // In-session re-check: a long-running window (the app can stay open for days) learns about
-  // a new release without a restart — on a ~24h timer and when the window regains focus.
+  // a new release without a restart, on a ~24h timer and when the window regains focus.
   useEffect(() => {
     const tick = () => {
       const s = settingsRef.current
@@ -135,7 +135,6 @@ function App() {
           claudeKeySet={claudeKeySet}
           azureDocIntelReady={azureDocIntelReady}
           azureContentUnderstandingReady={azureContentUnderstandingReady}
-          youtubeAvailable={!!caps?.youtube_available}
         />
       </main>
     </div>

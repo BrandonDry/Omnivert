@@ -36,26 +36,35 @@ $env:PYTHONPATH="$PWD\src"
 # Frontend dev server
 npm run dev --prefix frontend
 
-# Checks
+# Checks (CI runs all of these: .github/workflows/ci.yml)
 npm run build --prefix frontend
 npm run lint --prefix frontend
 ..\.venv\Scripts\python.exe -m compileall src
+..\.venv\Scripts\python.exe -m pytest -q
 $env:PYTHONPATH="$PWD\src"; ..\.venv\Scripts\python.exe tests\engine_smoke.py
 $env:PIP_CACHE_DIR="$PWD\.pip-cache"; ..\.venv\Scripts\python.exe -m pip wheel --no-deps --no-build-isolation . -w dist\wheel-check
 ```
 
 ## Architecture
 
-- `src/omnivert/main.py`: FastAPI routes and static frontend mount.
+- `src/omnivert/main.py`: FastAPI routes, the loopback Host guard, and the static frontend
+  mount.
 - `src/omnivert/launcher.py`: pywebview desktop launcher.
-- `src/omnivert/conversion.py`: conversion engine service wrapper.
+- `src/omnivert/conversion.py`: conversion engine service wrapper. The engine is cached per
+  worker thread and released per request, so every conversion route must run inside
+  `service.batch()`.
+- `src/omnivert/capabilities.py`: the format table and optional dependency list reported to
+  the Capabilities dialog. `_OPTIONAL_DEPS` is tied to `packaging/app.spec` by a test.
+- `src/omnivert/url_guard.py`: SSRF guard for URL conversion (scheme allowlist, non-public
+  address ranges, structured reasons rather than exceptions).
 - `src/omnivert/updates.py`: conversion engine update check/apply.
 - `src/omnivert/app_updates.py`: Omnivert app update check/apply.
 - `src/omnivert/installer_update.py`: frozen Windows installer-update path.
 - `src/omnivert/build_info.py`: build-time GitHub repo metadata.
 - `frontend/`: React/Vite UI.
 - `packaging/`: PyInstaller and Inno Setup files.
-- `.github/workflows/`: release and automated engine update workflows.
+- `.github/workflows/`: `ci.yml` (tests, typecheck, lint on every push and PR), plus the
+  release and automated engine update workflows.
 
 ## Licensing
 
@@ -71,7 +80,7 @@ $env:PIP_CACHE_DIR="$PWD\.pip-cache"; ..\.venv\Scripts\python.exe -m pip wheel -
   and the bundled notice files. The frozen build ships LICENSE/NOTICE/THIRD_PARTY_NOTICES.md
   (added to `packaging/app.spec` datas), and the Inno installer shows `LICENSE` via
   `LicenseFile` (`packaging/installer.iss`).
-- Omnivert is an independent project, not affiliated with/endorsed by Microsoft — keep that
+- Omnivert is an independent project, not affiliated with/endorsed by Microsoft, so keep that
   disclaimer wherever MarkItDown/Microsoft are named.
 
 ## Update Model
@@ -83,7 +92,7 @@ $env:PIP_CACHE_DIR="$PWD\.pip-cache"; ..\.venv\Scripts\python.exe -m pip wheel -
   but it disables direct engine apply and tells users to install the next Omnivert release.
 - GitHub automation watches PyPI for a newer **stable** conversion engine (pre-releases are
   skipped), pins it, runs smoke checks, then builds a **draft** GitHub Release. Users are only
-  prompted once a maintainer clicks **Publish** on the draft — that publish is the human
+  prompted once a maintainer clicks **Publish** on the draft, and that publish is the human
   approval gate.
 - App update checks run at launch **and** re-run in-session (~24h timer + on window focus,
   throttled to once/hour), so a long-running window learns about a release without a restart.
@@ -92,6 +101,21 @@ $env:PIP_CACHE_DIR="$PWD\.pip-cache"; ..\.venv\Scripts\python.exe -m pip wheel -
   and the in-app update dialog shows the bundled "engine X → Y" delta.
 - `tests/engine_smoke.py` (the auto-bump gate) covers txt/csv/html **and** pdf/docx/pptx/xlsx,
   with fixtures generated in-process (no committed binaries).
+
+## Testing
+
+- `python -m pytest -q` from the repo root. `pyproject.toml` sets `pythonpath = ["src"]`, so
+  no `PYTHONPATH` is needed.
+- `tests/engine_smoke.py` is deliberately not collected by pytest (no `test_` prefix): it
+  needs the real engine and runs separately as the auto-bump gate.
+- Several modules document invariants that a test now enforces rather than trusting to
+  review: `_OPTIONAL_DEPS` against `packaging/app.spec`, and `_ENGINE_CONFIG_KEYS` /
+  `_ENGINE_OPTION_FIELDS` against `ConversionService._construct` (a setting or option that
+  affects engine construction and is missing from those lists leaves a stale engine cached
+  after the user changes it).
+- CI (`.github/workflows/ci.yml`) runs the suite on Python 3.11 and 3.12 plus the frontend
+  typecheck, build and lint, on every push to `main` and every pull request. `release.yml`
+  and `engine-update.yml` run it too, before building anything.
 
 ## Handoff
 
@@ -109,16 +133,29 @@ $env:PIP_CACHE_DIR="$PWD\.pip-cache"; ..\.venv\Scripts\python.exe -m pip wheel -
   curated extras list, **not** `markitdown[all]` (the YouTube extra has Python-version
   caveats). If you need to repair/reinstall the environment, reinstall the same curated
   extras pin. `azure-ai-contentunderstanding` may pull a pydantic pre-release if prereleases
-  are allowed — pin `pydantic<2.14` back to stable afterward.
-- **`packaging/app.spec` — two fixes are in place; don't regress them:**
+  are allowed, so pin `pydantic<2.14` back to stable afterward.
+- **`openai` is OUR dependency, not the engine's.** MarkItDown 0.1.7 does not pull it in
+  under any extra, including `[all]`: it only calls `client.chat.completions.create` on a
+  client we build in `claude_shim.py`. It is declared directly in `pyproject.toml` as
+  `openai>=3,<4` and collected explicitly in `packaging/app.spec` hiddenimports, because it
+  resolves parts of itself lazily. Removing either one gives users a "Describe images with
+  Claude" toggle that can never succeed, which is exactly the bug that shipped in 0.1.1
+  through 0.1.4.
+- **YouTube is not shipped and the UI does not claim it is.** The pin excludes the
+  `youtube-transcription` extra and a frozen build cannot add one, so there is no
+  `youtube_available` field in the capabilities schema and no badge. Do not re-add either
+  without also changing the pin.
+- **`packaging/app.spec`, two fixes are in place; don't regress them:**
   1. `ROOT` is `Path(SPECPATH).parent` (the spec lives in `packaging/`, so its parent is the
      repo root). An extra `.parent` climbs out of the repo and breaks the freeze with
      *"script freeze_entry.py not found"*.
   2. The spec calls `copy_metadata("markitdown", recursive=True)` plus an explicit
      `copy_metadata` list for the optional deps in `_OPTIONAL_DEPS`
      (`src/omnivert/capabilities.py`). Without this, frozen builds return `None` from
-     `importlib.metadata.version(...)` and the Capabilities dialog shows no versions. Keep
-     the two lists in sync.
+     `importlib.metadata.version(...)` and the Capabilities dialog shows no versions. The
+     two lists must stay in sync, and `tests/test_capabilities.py` now enforces that by
+     parsing the spec, so a drift fails CI instead of shipping. Both lists had drifted in
+     both directions before that test existed.
 - **Wheel build:** clean the ignored `build\` cache first, then use
   `pip wheel --no-deps --no-build-isolation . -w dist\wheel-check`
   (with a repo-local `PIP_CACHE_DIR`). Prefer this over `python -m build` when a generated
@@ -133,8 +170,8 @@ The Windows build chain has been validated end-to-end: PyInstaller freeze →
 silent per-user install (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) →
 `%LOCALAPPDATA%\Programs\Omnivert\`; installed app boots, serves `/api`, reports
 `frozen:true`, and converts files. Update-over-install upgrades in place (single Uninstall
-entry, no side-by-side). All three workflows (`release.yml`, `engine-watch.yml`,
-`engine-update.yml`) are active on `BrandonDry/Omnivert`.
+entry, no side-by-side). The release workflows (`release.yml`, `engine-watch.yml`,
+`engine-update.yml`) plus `ci.yml` are active on `BrandonDry/Omnivert`.
 
 ### Update-pipeline notes
 

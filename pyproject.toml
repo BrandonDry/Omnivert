@@ -37,12 +37,27 @@ classifiers = [
   "Topic :: Utilities",
 ]
 dependencies = [
-  "fastapi",
+  # >=0.132 for the strict_content_type default: below it a request body with NO
+  # Content-Type is parsed as JSON, and a browser can send that cross-origin without a CORS
+  # preflight, which makes every JSON route a CSRF target. The requirement was previously
+  # unbounded, so an environment already holding an older FastAPI stayed vulnerable.
+  "fastapi>=0.132",
   "uvicorn[standard]",
   "python-multipart",
   "trio",
   "pywebview",
   "markitdown[pptx,docx,xlsx,xls,pdf,outlook,az-doc-intel,az-content-understanding,audio-transcription]==0.1.7",
+  # Image captioning builds an OpenAI-compatible client pointed at Anthropic (claude_shim.py).
+  # This is OUR direct dependency: markitdown 0.1.7 does not pull openai in under any extra
+  # (not even [all]). It only calls `client.chat.completions.create` on a client we hand it.
+  # Without this line a clean install has a "Describe images with Claude" toggle that can
+  # never succeed.
+  #
+  # Bounded to one major, matching how the engine itself is pinned: releases resolve
+  # dependencies at build time, so an unbounded requirement lets two builds of the same tag
+  # bundle different majors, and a major that changes the chat-completions request shape
+  # would break captioning with no source change to point at. Verified against 3.11.0.
+  "openai>=3,<4",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +77,13 @@ Changelog = "https://github.com/BrandonDry/Omnivert/blob/main/CHANGELOG.md"
 
 [project.scripts]
 omnivert = "omnivert.launcher:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The package lives under src/, so pytest needs it importable without a PYTHONPATH dance.
+# engine_smoke.py is deliberately NOT collected (it has no test_ prefix): CI runs it
+# directly as the auto-bump gate, and it needs the real engine rather than a unit harness.
+pythonpath = ["src"]
 
 [tool.setuptools.dynamic]
 version = {attr = "omnivert.app_version.__version__"}

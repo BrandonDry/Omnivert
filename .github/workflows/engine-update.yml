@@ -64,10 +64,16 @@ jobs:
         run: python scripts/copy_web_assets.py
 
       - name: Install updated Python package
-        run: python -m pip install -e ".[build]"
+        run: python -m pip install -e ".[build,test]"
 
       - name: Backend import checks
         run: python -m compileall src
+
+      - name: Unit tests
+        # Catches what engine_smoke.py cannot: a new engine that changes its accepted
+        # extensions or its constructor kwargs invalidates the capability table and the
+        # engine-cache signature without any conversion failing.
+        run: python -m pytest -q
 
       - name: Engine conversion smoke tests
         run: python tests/engine_smoke.py
@@ -95,7 +101,7 @@ jobs:
 
             After merge this tags a release and builds a **draft** GitHub Release with the
             bundled MarkItDown changelog. Users are not prompted until a maintainer clicks
-            **Publish** on that draft — that publish is the human approval gate.
+            **Publish** on that draft, and that publish is the human approval gate.
 
       - name: Merge guarded PR and tag release
         if: steps.cpr.outputs.pull-request-number != ''

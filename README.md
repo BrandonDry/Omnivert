@@ -1,16 +1,17 @@
 <p align="center">
-  <img src="assets/omnivert-banner.png" alt="Omnivert — Convert anything to Markdown" width="640">
+  <img src="assets/omnivert-banner.png" alt="Omnivert: Convert anything to Markdown" width="640">
 </p>
 
 <p align="center">
   A Windows desktop app that turns files, folders, URLs, and pasted text into clean
-  Markdown — no terminal required.
+  Markdown, no terminal required.
 </p>
 
 <p align="center">
   <a href="https://github.com/BrandonDry/Omnivert/releases/latest"><img src="https://img.shields.io/github/v/release/BrandonDry/Omnivert?label=download&color=7e14ff" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
   <img src="https://img.shields.io/badge/platform-Windows-0078d4" alt="Platform: Windows">
+  <a href="https://github.com/BrandonDry/Omnivert/actions/workflows/ci.yml"><img src="https://github.com/BrandonDry/Omnivert/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
 </p>
 
 ---
@@ -27,19 +28,20 @@ It runs entirely on your machine. Conversions happen locally, and optional cloud
 
 ## Features
 
-- **Many input types** — PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX/XLS), images,
-  audio, HTML, CSV, JSON, XML, EPUB, ZIP archives, and more.
-- **Four ways to convert** — drop in files, point at a whole folder (optionally recursive),
+- **Many input types:** PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX/XLS), Outlook
+  messages (MSG), images, audio, HTML, CSV, JSON/JSONL, XML/RSS/Atom, EPUB, Jupyter
+  notebooks, ZIP archives, and plain text.
+- **Four ways to convert:** drop in files, point at a whole folder (optionally recursive),
   paste a URL, or paste raw text.
-- **Batch conversion** — convert many files at once and download everything as a single
+- **Batch conversion:** convert many files at once and download everything as a single
   `.md` or a `.zip`.
-- **Live preview** — see rendered Markdown and the raw source side by side, copy with one
+- **Live preview:** see rendered Markdown and the raw source side by side, copy with one
   click, or save to disk.
-- **Optional AI image captions** — bring your own Claude or Azure key to describe images
+- **Optional AI image captions:** bring your own Claude or Azure key to describe images
   inside documents.
 - **Light / dark / system themes** and keyboard shortcuts (Ctrl+Enter to convert).
-- **Self-updating** — the app checks GitHub for new releases and can update itself.
-- **Private by default** — runs locally; no telemetry, no account required.
+- **Self-updating:** the app checks GitHub for new releases and can update itself.
+- **Private by default:** runs locally; no telemetry, no account required.
 
 ## Install
 
@@ -51,7 +53,7 @@ It runs entirely on your machine. Conversions happen locally, and optional cloud
 ### "Windows protected your PC" (SmartScreen)
 
 Omnivert installers are not yet code-signed, so Windows SmartScreen may warn you the first
-time you run the installer. The download is safe — to proceed:
+time you run the installer. The download is safe. To proceed:
 
 1. On the blue SmartScreen dialog, click **More info**.
 2. Click **Run anyway**.
@@ -64,12 +66,12 @@ Get-FileHash .\Omnivert-Setup-<version>.exe -Algorithm SHA256
 ```
 
 The printed hash should match the matching line in `SHA256SUMS`. Code signing is a planned
-follow-up — see [SECURITY.md](SECURITY.md).
+follow-up, see [SECURITY.md](SECURITY.md).
 
 ## Use it
 
 1. Open Omnivert.
-2. Choose a tab — **Files**, **Folder**, **URL**, or **Text**.
+2. Choose a tab: **Files**, **Folder**, **URL**, or **Text**.
 3. Add your input (drag-and-drop files, pick a folder, paste a URL or text).
 4. Click **Convert** (or press **Ctrl+Enter**).
 5. Preview the Markdown, then **Copy** or **Save** / **Download**.
@@ -80,7 +82,7 @@ Settings (including any API keys) are stored outside the app at:
 %LOCALAPPDATA%\Omnivert\settings.json
 ```
 
-That file may contain secrets. It is stored in plaintext on your machine — don't share it
+That file may contain secrets. It is stored in plaintext on your machine, so don't share it
 or paste it into support logs. See [SECURITY.md](SECURITY.md) for details.
 
 ## Updates
@@ -130,7 +132,10 @@ for how to set up, build, and submit changes.
 ..\.venv\Scripts\python.exe -m compileall src
 $env:PYTHONPATH="$PWD\src"; ..\.venv\Scripts\python.exe -c "import omnivert.main; import omnivert.launcher"
 
-# Representative conversions (also the CI engine-bump gate)
+# Unit tests (no PYTHONPATH needed: pyproject sets pythonpath = ["src"])
+..\.venv\Scripts\python.exe -m pytest -q
+
+# Representative conversions (also the CI engine-bump gate; pytest does not collect this)
 $env:PYTHONPATH="$PWD\src"; ..\.venv\Scripts\python.exe tests\engine_smoke.py
 
 # Frontend
@@ -163,7 +168,7 @@ npm run build --prefix frontend
 python scripts\copy_web_assets.py
 python -m pip install -e ".[build]"
 pyinstaller packaging\app.spec --noconfirm --clean
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion="0.1.1" packaging\installer.iss
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion="0.1.5" packaging\installer.iss
 ```
 
 The installer is written to `dist/installer/`. Release automation is documented in
@@ -176,8 +181,14 @@ The installer is written to `dist/installer/`. Release automation is documented 
 - Non-WAV audio conversion needs `ffmpeg` on `PATH`. Without it, the engine emits a
   non-fatal warning and audio conversion can be limited.
 - The `markitdown[all]` extra is intentionally not used here because the YouTube extra has
-  Python-version caveats. YouTube URL support may still work if a compatible
-  `youtube-transcript-api` is present in the environment.
+  Python-version caveats. YouTube transcript extraction is therefore **not** available in
+  installed builds, and the UI no longer advertises it. Running from a checkout, you can
+  still add a compatible `youtube-transcript-api` to the environment yourself.
+- The Capabilities dialog marks a format **unavailable** when a dependency that gates it
+  cannot be found, and names the dependency. Every dependency it lists ships with Omnivert,
+  so anything reported missing means a damaged install rather than a normal state: reinstall
+  to repair it. Note it detects a *missing* dependency, not a present-but-broken one, so a
+  conversion can still fail with a healthy-looking dialog.
 - Claude image captions and Azure Document Intelligence/Content Understanding require valid
   keys in Settings. The API redacts stored secrets on read.
 
@@ -192,6 +203,6 @@ Full third-party license texts are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOT
 
 ## License
 
-Omnivert's own code is licensed under the **Apache License 2.0** — see [`LICENSE`](LICENSE)
+Omnivert's own code is licensed under the **Apache License 2.0**, see [`LICENSE`](LICENSE)
 and [`NOTICE`](NOTICE). Bundled third-party software retains its own license; see
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

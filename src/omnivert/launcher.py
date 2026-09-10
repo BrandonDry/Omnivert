@@ -104,7 +104,7 @@ def main() -> int:
     if FRONTEND_DIST.exists():
         window_kwargs = {"url": base_url}
     else:
-        # Backend is up but UI isn't built — show instructions instead of a blank window.
+        # Backend is up but UI isn't built, so show instructions instead of a blank window.
         window_kwargs = {"html": _NOT_BUILT_HTML}
 
     window = webview.create_window(

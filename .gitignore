@@ -13,7 +13,7 @@ __pycache__/
 build/
 dist/
 
-# Local settings (may contain API keys) — never commit
+# Local settings (may contain API keys), never commit
 settings.json
 
 # Packaging scratch/output

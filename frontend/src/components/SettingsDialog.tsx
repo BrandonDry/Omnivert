@@ -57,6 +57,45 @@ function SectionTitle({ children }: { children: ReactNode }) {
   return <h3 className="text-sm font-semibold">{children}</h3>
 }
 
+/**
+ * Comma-separated file-type entry.
+ *
+ * The raw text is held locally rather than derived from the parsed array. Deriving it ate
+ * the separator: typing ".pdf" then "," parses to [".pdf"], which renders back as ".pdf"
+ * and wipes the comma the user just typed, so the field could never hold more than one
+ * extension. Parsing still happens on every keystroke so the saved value stays in step;
+ * only the *display* comes from local state.
+ *
+ * Seeded once per mount. The caller remounts it (via `key`) when the dialog reopens and
+ * reloads settings from the server.
+ */
+function FileTypesInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string[]
+  onChange: (next: string[]) => void
+  placeholder?: string
+}) {
+  const [raw, setRaw] = useState(value.join(", "))
+  return (
+    <Input
+      placeholder={placeholder}
+      value={raw}
+      onChange={(e) => {
+        setRaw(e.target.value)
+        onChange(
+          e.target.value
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        )
+      }}
+    />
+  )
+}
+
 export function SettingsDialog({ children, onSaved }: Props) {
   const { setTheme } = useTheme()
   const [open, setOpen] = useState(false)
@@ -117,7 +156,7 @@ export function SettingsDialog({ children, onSaved }: Props) {
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
             API keys are stored locally and never leave this machine. Secret fields show a
-            placeholder when a value is already saved — leave them blank to keep it.
+            placeholder when a value is already saved. Leave them blank to keep it.
           </DialogDescription>
         </DialogHeader>
 
@@ -227,6 +266,17 @@ export function SettingsDialog({ children, onSaved }: Props) {
                   />
                 </Field>
               </div>
+              <Field
+                label="File types"
+                hint="Comma-separated extensions to route through this backend. Empty = all."
+              >
+                <FileTypesInput
+                  key={`docintel-file-types-${open}`}
+                  placeholder=".pdf, .png"
+                  value={draft.docintel_file_types}
+                  onChange={(next) => patch({ docintel_file_types: next })}
+                />
+              </Field>
             </section>
 
             <Separator />
@@ -264,17 +314,11 @@ export function SettingsDialog({ children, onSaved }: Props) {
                 label="File types"
                 hint="Comma-separated extensions, e.g. .pdf, .docx. Empty = all."
               >
-                <Input
+                <FileTypesInput
+                  key={`cu-file-types-${open}`}
                   placeholder=".pdf, .docx"
-                  value={draft.cu_file_types.join(", ")}
-                  onChange={(e) =>
-                    patch({
-                      cu_file_types: e.target.value
-                        .split(",")
-                        .map((s) => s.trim())
-                        .filter(Boolean),
-                    })
-                  }
+                  value={draft.cu_file_types}
+                  onChange={(next) => patch({ cu_file_types: next })}
                 />
               </Field>
             </section>
@@ -312,7 +356,7 @@ export function SettingsDialog({ children, onSaved }: Props) {
               <SectionTitle>Updates</SectionTitle>
               <Field
                 label="App GitHub repository"
-                hint="owner/repo — where Omnivert's tagged releases are published. Leave blank to disable app update checks."
+                hint="owner/repo, where Omnivert's tagged releases are published. Leave blank to disable app update checks."
               >
                 <Input
                   placeholder="your-name/omnivert"

@@ -96,7 +96,16 @@ jobs:
         run: python scripts/copy_web_assets.py
 
       - name: Install Python package and build tools
-        run: python -m pip install -e ".[build]"
+        run: python -m pip install -e ".[build,test]"
+
+      - name: Import checks
+        run: python -m compileall -q src
+
+      - name: Unit tests
+        run: python -m pytest -q
+
+      - name: Engine conversion smoke tests
+        run: python tests/engine_smoke.py
 
       - name: Build wheel
         run: python -m build --wheel
@@ -128,7 +137,7 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.value }}
           # Drafts are built automatically but only reach users when a maintainer clicks
-          # Publish — that click is the human approval gate for engine auto-bumps.
+          # Publish: that click is the human approval gate for engine auto-bumps.
           draft: true
           body_path: dist/release-notes.md
           # Appends GitHub's auto-generated commit/PR notes below the engine changelog.

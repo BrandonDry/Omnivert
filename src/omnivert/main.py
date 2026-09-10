@@ -70,13 +70,19 @@ async def _guard_host(request: Request, call_next):
 
     This is a DNS-rebinding guard. The server binds 127.0.0.1, but that alone doesn't stop
     a malicious website the user visits in their normal browser from rebinding its own
-    hostname to 127.0.0.1 and POSTing to the unauthenticated local API — and because that
+    hostname to 127.0.0.1 and POSTing to the unauthenticated local API, and because that
     makes the request look same-origin to the browser, CORS does not protect against it.
     A rebound request still carries the attacker's hostname in its Host header, so refusing
-    non-loopback hosts closes the vector. The bundled UI always talks to
-    http://127.0.0.1:<port>, and the Vite dev proxy forwards as localhost, so legitimate
-    traffic is unaffected. Requests with no Host header (rare non-browser clients) are
-    allowed through — a browser-based attacker cannot omit it."""
+    non-loopback hosts closes THAT vector. It does not, and cannot, stop a page addressing
+    http://127.0.0.1:<port> directly: the Host is then a loopback name and must be allowed,
+    since that is how the bundled UI itself talks to the API. What limits the direct case is
+    the absence of a cross-origin allow header (the page cannot read any response) and the
+    fastapi>=0.132 floor (a JSON route rejects a body sent with a CORS-simple content type,
+    so it needs a preflight this app refuses). SECURITY.md states that residual for users.
+
+    The bundled UI always talks to http://127.0.0.1:<port>, and the Vite dev proxy forwards
+    as localhost, so legitimate traffic is unaffected. Requests with no Host header (rare
+    non-browser clients) are allowed through: a browser-based attacker cannot omit it."""
     host = request.headers.get("host", "").strip()
     if host:
         if host.startswith("["):  # bracketed IPv6, optionally with :port -> [::1]:8765
@@ -162,9 +168,12 @@ def convert_file(
     # conversion below doesn't block the event loop (read uploads synchronously too).
     opts = _parse_options(options)
     results: List[ConversionResult] = []
-    for upload in files:
-        data = upload.file.read()
-        results.append(service.convert_bytes(data, upload.filename or "upload", opts))
+    # service.batch() reuses one engine across the whole request and frees it afterwards.
+    # Every conversion route needs it: see the note above _engine_cache in conversion.py.
+    with service.batch():
+        for upload in files:
+            data = upload.file.read()
+            results.append(service.convert_bytes(data, upload.filename or "upload", opts))
     return BatchResult(batch_id=jobs.register(results), results=results)
 
 
@@ -172,7 +181,7 @@ def convert_file(
 def convert_folder(req: FolderConvertRequest) -> BatchResult:
     # CodeQL flags this as path-injection (py/path-injection). By design: this is a local
     # file converter, so reading the folder the user themselves selected (native picker or
-    # a typed path) on their own machine is the feature, not a flaw — there is no safe root
+    # a typed path) on their own machine is the feature, not a flaw, and there is no safe root
     # to confine to. The unauthenticated-local-API vector this could otherwise enable is
     # closed by the loopback Host guard above (_guard_host).
     root = Path(req.path.strip()).expanduser()
@@ -189,7 +198,8 @@ def convert_folder(req: FolderConvertRequest) -> BatchResult:
             "Pick a narrower folder.",
         )
 
-    results = [_convert_path(p, p.relative_to(root).as_posix(), req.options) for p in files]
+    with service.batch():
+        results = [_convert_path(p, p.relative_to(root).as_posix(), req.options) for p in files]
     return BatchResult(batch_id=jobs.register(results), results=results)
 
 
@@ -198,22 +208,24 @@ def convert_paths(req: PathsConvertRequest) -> BatchResult:
     if not req.paths:
         raise HTTPException(status_code=422, detail="No paths provided.")
     results: List[ConversionResult] = []
-    for raw in req.paths:
-        # By design / path-injection (see convert_folder): these paths are the local files
-        # the user selected to convert; reading them is the feature. Guarded by _guard_host.
-        path = Path(raw).expanduser()
-        if not path.is_file():
-            results.append(
-                ConversionResult(
-                    filename=path.name or raw,
-                    ok=False,
-                    error=f"File not found: {raw}",
-                    error_kind="not_found",
-                    remediation="The file may have moved or been deleted.",
+    with service.batch():
+        for raw in req.paths:
+            # By design / path-injection (see convert_folder): these paths are the local
+            # files the user selected to convert; reading them is the feature. Guarded by
+            # _guard_host.
+            path = Path(raw).expanduser()
+            if not path.is_file():
+                results.append(
+                    ConversionResult(
+                        filename=path.name or raw,
+                        ok=False,
+                        error=f"File not found: {raw}",
+                        error_kind="not_found",
+                        remediation="The file may have moved or been deleted.",
+                    )
                 )
-            )
-            continue
-        results.append(_convert_path(path, path.name, req.options))
+                continue
+            results.append(_convert_path(path, path.name, req.options))
     return BatchResult(batch_id=jobs.register(results), results=results)
 
 
@@ -360,12 +372,14 @@ def app_updates_status() -> UpdateStatus:
 def convert_url(req: UrlConvertRequest) -> ConversionResult:
     if not req.url.strip():
         raise HTTPException(status_code=422, detail="A URL is required.")
-    return service.convert_url(req.url.strip(), req.options)
+    with service.batch():
+        return service.convert_url(req.url.strip(), req.options)
 
 
 @app.post("/api/convert/text", response_model=ConversionResult)
 def convert_text(req: TextConvertRequest) -> ConversionResult:
-    return service.convert_text(req.content, req.extension, req.charset, req.options)
+    with service.batch():
+        return service.convert_text(req.content, req.extension, req.charset, req.options)
 
 
 # --- settings ------------------------------------------------------------------------

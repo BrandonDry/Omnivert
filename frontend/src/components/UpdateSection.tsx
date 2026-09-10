@@ -16,8 +16,8 @@ import { Markdown } from "@/components/Markdown"
 import type { UpdateStatus } from "@/lib/types"
 
 /** One product's update row (used for both the app and the conversion engine). It owns the
- *  install state machine — start the upgrade, then poll the matching status endpoint until
- *  it leaves `running` — so the parent dialog just wires in the product-specific calls. */
+ *  install state machine: start the upgrade, then poll the matching status endpoint until
+ *  it leaves `running`, so the parent dialog just wires in the product-specific calls. */
 export interface UpdateApply {
   label: string
   canApply: boolean
@@ -78,7 +78,7 @@ export function UpdateSection({
           setStatus(s)
           if (s.state !== "running") {
             stopPolling()
-            if (s.state === "success") toast.success("Update installed — restart to finish")
+            if (s.state === "success") toast.success("Update installed, restart to finish")
             else if (s.state === "error") toast.error("Update failed")
           }
         } catch {
@@ -102,11 +102,11 @@ export function UpdateSection({
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <div>
           <div className="text-xs text-muted-foreground">Installed</div>
-          <div className="font-mono font-medium">{installed ?? "—"}</div>
+          <div className="font-mono font-medium">{installed ?? "not installed"}</div>
         </div>
         <div>
           <div className="text-xs text-muted-foreground">Latest</div>
-          <div className="font-mono font-medium">{latest ?? "—"}</div>
+          <div className="font-mono font-medium">{latest ?? "unknown"}</div>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {upToDate && <Badge variant="muted">Up to date</Badge>}
@@ -184,7 +184,7 @@ export function UpdateSection({
       {releaseNotes ? (
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <h4 className="text-sm font-medium">Release notes — {latest}</h4>
+            <h4 className="text-sm font-medium">Release notes: {latest}</h4>
             {releaseUrl && (
               <a
                 href={releaseUrl}

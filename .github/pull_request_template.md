@@ -18,10 +18,12 @@ Briefly describe what this PR changes and why.
 
 Describe the checks you ran. For most changes:
 
+- [ ] `python -m pytest -q`
 - [ ] `python -m compileall src`
 - [ ] `python tests\engine_smoke.py`
 - [ ] `npm run lint --prefix frontend`
 - [ ] `npm run build --prefix frontend`
+- [ ] Added or updated tests in `tests/` for the behaviour I changed
 - [ ] Manually verified in the running app (if UI/behavior changed)
 
 ## Checklist

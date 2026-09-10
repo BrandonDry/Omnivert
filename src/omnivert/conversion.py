@@ -1,12 +1,16 @@
-"""ConversionService — the single place that builds conversion engine instances and runs
+"""ConversionService: the single place that builds conversion engine instances and runs
 conversions, capturing warnings and mapping exceptions to friendly, structured errors.
 """
 
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 import os
+import threading
 import warnings
+from contextlib import contextmanager
 from typing import Any, Dict, List, Tuple
 
 from markitdown import MarkItDown as Engine, StreamInfo
@@ -47,11 +51,102 @@ def _ext_from_filename(filename: str | None) -> str | None:
     return ext or None
 
 
+# Every settings key that ``_construct`` reads. The cache signature is computed from these,
+# so a new engine-affecting setting MUST be added here or a stale engine will be reused
+# after the user changes it. ``test_conversion.py`` pins this list against ``_construct``.
+_ENGINE_CONFIG_KEYS = (
+    "exiftool_path",
+    "style_map",
+    "claude_api_key",
+    "claude_base_url",
+    "claude_model",
+    "llm_prompt",
+    "docintel_endpoint",
+    "docintel_key",
+    "docintel_api_version",
+    "docintel_file_types",
+    "cu_endpoint",
+    "cu_key",
+    "cu_analyzer_id",
+    "cu_file_types",
+)
+
+# The ConvertOptions fields that affect construction. Same contract as the keys above: a
+# construction-affecting option missing here means a stale engine survives the user
+# toggling it. Kept as a constant so ``_signature`` and the test read the same list; when
+# they were inline in ``_signature`` the test could only check the cfg half, and a review
+# proved an option added to ``_construct`` slipped through silently.
+_ENGINE_OPTION_FIELDS = ("enable_plugins", "describe_images", "azure_backend")
+
+# Engine construction is not free. ``MarkItDown.__init__`` builds a ``magika.Magika()`` and
+# registers ~20 converters: measured at ~36 ms AND ~7.8 MB per instance on the pinned engine.
+# magika does not share one ONNX session across instances, it builds a fresh
+# ``InferenceSession`` every time, so that memory is per engine and never amortised. (An
+# earlier version of this comment claimed the opposite, inferred from the timing alone. It
+# was wrong. Measure both time and memory before changing this.)
+#
+# The old code built one engine per FILE, so a 1000-file folder batch spent ~36 s doing
+# nothing but rebuilding it. Two constraints shape the fix:
+#
+#   1. Cache per *thread*, not globally. These sync routes run on the anyio threadpool, so a
+#      batch runs start-to-finish on one thread and hits the cache for every file after the
+#      first, while two concurrent requests land on different threads and never share an
+#      engine. That matters: an engine holds a ``requests.Session``, which is not thread-safe.
+#   2. Release at the end of each request. Worker threads outlive the requests that ran on
+#      them, so a thread-local alone lets each of anyio's 40 workers pin ~7.8 MB: a ceiling
+#      near 340 MB. anyio does prune threads idle for 10 s, so it is a high-water mark
+#      rather than a true leak, but trading a speed problem for a memory one is not a fix.
+#      ``ConversionService.batch()`` frees it, and every conversion route must use it.
+_engine_cache = threading.local()
+
+
 class ConversionService:
     """Builds configured conversion engine instances and performs conversions."""
 
+    @staticmethod
+    def _signature(cfg: Dict[str, Any], opts: ConvertOptions) -> str:
+        """Hash every input that affects how the engine is *constructed*.
+
+        Per-call conversion kwargs (``keep_data_uris``) and the stream hints
+        (extension/mimetype/charset) are deliberately excluded: they are passed at convert
+        time and do not change the engine. Secrets are hashed rather than retained, so the
+        cache key never holds an API key in plaintext.
+        """
+        material = json.dumps(
+            {
+                "opts": {f: getattr(opts, f) for f in _ENGINE_OPTION_FIELDS},
+                "cfg": {k: cfg.get(k) for k in _ENGINE_CONFIG_KEYS},
+            },
+            sort_keys=True,
+            default=str,
+        )
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    @contextmanager
+    def batch():
+        """Reuse one engine for every conversion inside this block, then release it.
+
+        Every conversion *request* must be wrapped in this. Without the release the
+        thread-local cache is never reclaimed, because threadpool threads outlive the
+        requests that used them. See the note above ``_engine_cache``.
+        """
+        try:
+            yield
+        finally:
+            _engine_cache.entry = None
+
     def _build(self, opts: ConvertOptions) -> Engine:
         cfg = settings_module.load()
+        signature = self._signature(cfg, opts)
+        cached = getattr(_engine_cache, "entry", None)
+        if cached is not None and cached[0] == signature:
+            return cached[1]
+        engine = self._construct(cfg, opts)
+        _engine_cache.entry = (signature, engine)
+        return engine
+
+    def _construct(self, cfg: Dict[str, Any], opts: ConvertOptions) -> Engine:
         kwargs: Dict[str, Any] = {}
 
         if cfg.get("exiftool_path"):
@@ -83,6 +178,10 @@ class ConversionService:
             kwargs["docintel_endpoint"] = endpoint
             if cfg.get("docintel_api_version"):
                 kwargs["docintel_api_version"] = cfg["docintel_api_version"]
+            if cfg.get("docintel_file_types"):
+                kwargs["docintel_file_types"] = self._docintel_file_types(
+                    cfg["docintel_file_types"]
+                )
             cred = self._azure_credential(cfg.get("docintel_key"))
             if cred is not None:
                 kwargs["docintel_credential"] = cred
@@ -118,11 +217,14 @@ class ConversionService:
         return AzureKeyCredential(key)
 
     @staticmethod
-    def _cu_file_types(raw_types: List[str]):
-        """Parse Settings' string file-type list into the engine's CU enum values."""
-        from markitdown.converters import ContentUnderstandingFileType
+    def _parse_file_types(raw_types: List[str], enum_cls, label: str):
+        """Parse Settings' string file-type list into one of the engine's file-type enums.
 
-        aliases = {"jpg": "jpeg", "jpe": "jpeg", "tif": "tiff"}
+        Both cloud backends take the same shape of list, so they share this. Users type
+        what they see on a file (".JPG", "tif"), not the engine's spelling, hence the
+        strip/lower/de-dot and the alias map.
+        """
+        aliases = {"jpg": "jpeg", "jpe": "jpeg", "tif": "tiff", "htm": "html"}
         parsed = []
         for raw in raw_types:
             value = str(raw).strip().lower().lstrip(".")
@@ -130,14 +232,29 @@ class ConversionService:
                 continue
             value = aliases.get(value, value)
             try:
-                parsed.append(ContentUnderstandingFileType(value))
+                parsed.append(enum_cls(value))
             except ValueError as exc:
-                valid = ", ".join(item.value for item in ContentUnderstandingFileType)
+                valid = ", ".join(item.value for item in enum_cls)
                 raise RuntimeError(
-                    f"Unsupported Content Understanding file type '{raw}'. "
-                    f"Use one of: {valid}."
+                    f"Unsupported {label} file type '{raw}'. Use one of: {valid}."
                 ) from exc
         return parsed or None
+
+    @classmethod
+    def _cu_file_types(cls, raw_types: List[str]):
+        from markitdown.converters import ContentUnderstandingFileType
+
+        return cls._parse_file_types(
+            raw_types, ContentUnderstandingFileType, "Content Understanding"
+        )
+
+    @classmethod
+    def _docintel_file_types(cls, raw_types: List[str]):
+        from markitdown.converters import DocumentIntelligenceFileType
+
+        return cls._parse_file_types(
+            raw_types, DocumentIntelligenceFileType, "Document Intelligence"
+        )
 
     @staticmethod
     def _convert_kwargs(opts: ConvertOptions) -> Dict[str, Any]:

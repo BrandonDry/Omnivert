@@ -24,6 +24,7 @@ DEFAULTS: Dict[str, Any] = {
     "docintel_endpoint": "",
     "docintel_key": "",
     "docintel_api_version": "",
+    "docintel_file_types": [],  # comma list in UI -> list here; empty = auto/all
     # Azure Content Understanding
     "cu_endpoint": "",
     "cu_key": "",

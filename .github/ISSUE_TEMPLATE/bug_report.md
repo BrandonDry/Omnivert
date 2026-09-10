@@ -35,7 +35,8 @@ Paste any error message, warning callout, or relevant log output here.
 - Omnivert version: <!-- Help/About, or the installer filename, e.g. Omnivert-Setup-<version>.exe -->
 - Windows version: <!-- e.g. Windows 11 23H2 -->
 - Install type: <!-- installed Setup.exe / running from source -->
+- Capabilities dialog: <!-- any format marked "unavailable", or any dependency marked missing -->
 
 ## Additional context
 
-Anything else that might help — screenshots, frequency, recent changes, etc.
+Anything else that might help: screenshots, frequency, recent changes, etc.
