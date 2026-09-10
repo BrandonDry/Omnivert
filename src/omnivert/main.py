@@ -587,13 +587,15 @@ def _list_folder(root: Path, recursive: bool) -> List[Path]:
     """
     limit = MAX_BATCH_FILES + 1
     if not recursive:
+        # Cap during the scan, then sort. Sorting first would materialise the whole listing,
+        # directories included, which is the cost this cap exists to avoid.
         shallow: List[Path] = []
-        for path in sorted(root.iterdir()):
+        for path in root.iterdir():
             if path.is_file():
                 shallow.append(path)
                 if len(shallow) >= limit:
                     break
-        return shallow
+        return sorted(shallow)
 
     files: List[Path] = []
     for current, dirnames, filenames in os.walk(root):
@@ -604,7 +606,6 @@ def _list_folder(root: Path, recursive: bool) -> List[Path]:
             if path.is_file():
                 files.append(path)
                 if len(files) >= limit:
-                    dirnames[:] = []  # stop os.walk descending any further
                     return sorted(files)
     return sorted(files)
 

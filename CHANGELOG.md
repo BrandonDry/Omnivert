@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.6] - 2026-09-10
 
-0.1.5 was built, verified and never published: everything in its section below reaches users
-for the first time here. If you are on 0.1.3, this release carries both.
+0.1.4 and 0.1.5 were both built and never published, so everything in their sections below
+reaches users for the first time here. Coming from 0.1.3, this release carries all three:
+0.1.4's conversion engine bump to MarkItDown 0.1.7, 0.1.5's security fixes, and this.
 
 ### Security
 
@@ -22,17 +23,21 @@ for the first time here. If you are on 0.1.3, this release carries both.
   the whole route surface for no benefit, since nothing in the UI reads it. All three are off
   in packaged builds and unchanged in development. Confirmed against the frozen build, not
   just the source.
-- **Two Settings fields were execution, not configuration, and are now checked.**
+- **Four Settings fields were execution, not configuration, and are now checked.**
   `exiftool_path` is handed to the conversion engine, which runs it as a program
   (`subprocess.run([it, "-ver"])`), so a write to the local API followed by any image
   conversion ran a program of the caller's choosing as you. Reproduced with a batch file that
-  wrote a marker naming the logged-in user. It must now be a real local file actually named
-  `exiftool.exe`, and never a network path. Separately, `claude_base_url`,
+  wrote a marker naming the logged-in user. It must now be a real local file whose name
+  starts with `exiftool` and ends in `.exe` (so the official `exiftool(-k).exe` download
+  works as-is), and never a network path, checked before anything touches the filesystem so
+  a network path cannot make Omnivert reach out to a host a caller named. Separately,
+  `claude_base_url`,
   `docintel_endpoint` and `cu_endpoint` decide which server receives the matching API key, so
   repointing one exfiltrated the key that reading settings back carefully redacts; they must
   now be `https`, or plain `http` only on this machine, which keeps a local gateway working.
-  Rejections are reported as a 422 naming the field, and the values are re-checked at the
-  point of use so a settings file written by an older build cannot smuggle one through.
+  Rejections are reported as a 422 naming the field. All four are re-checked again at the
+  point of use, because loading settings deliberately does not validate, so a file written
+  by an older build is exactly the case that would otherwise slip past the write-time check.
 - **Narrowed, not closed, and worth being exact about.** Someone who can reach the local API
   can still point an endpoint at an `https` host they control. A website cannot reach it, and
   that is tested; local code can, which for same-user malware changes nothing and on a machine
@@ -68,6 +73,15 @@ for the first time here. If you are on 0.1.3, this release carries both.
 
 ### Changed
 
+- **A saved setting may now be refused when you next open Settings.** The checks above are
+  applied on save, so a value that was accepted before can be rejected now: an ExifTool path
+  that is not an `exiftool*.exe` file on this machine, or a cloud endpoint on plain `http`
+  to anything other than this machine. Only a field you actually change is checked, so an
+  older value you leave alone will not block you from saving anything else, and the dialog
+  shows exactly what is wrong when it does refuse one.
+  Conversions themselves are unaffected: an unusable ExifTool path is simply ignored, the
+  same position a broken path already left you in, and a refused cloud endpoint only stops
+  the cloud backend you selected.
 - **The download is smaller, and no longer carries the build tool that made it.** The frozen
   executable embedded PyInstaller's own build modules, all of `pytest`, and the whole of
   `pygments`: 447 modules of build-time tooling in a binary that never invokes a build tool.

@@ -474,12 +474,33 @@ def test_dev_keeps_the_api_docs():
     assert client.get("/openapi.json").status_code == 200
 
 
-def test_the_frontend_path_is_never_relative():
-    """An unset _MEIPASS used to make this ``Path("web")``, resolved against the working
-    directory, so a stray ``web`` folder beside the process became the served frontend."""
-    with mock.patch.object(main.Path, "exists", lambda self: False):
-        resolved = main._frontend_dist()
+def test_the_frontend_path_is_never_relative(tmp_path, monkeypatch):
+    """A stray ``web`` folder in the working directory must not become the served UI.
+
+    Reproduces the actual bug rather than asserting around it. With ``sys._MEIPASS`` unset,
+    ``Path(getattr(sys, "_MEIPASS", "")) / "web"`` is the RELATIVE path ``web``, and
+    ``.exists()`` on it asks the working directory. An earlier version of this test patched
+    ``Path.exists`` to always return False, which made the buggy branch unreachable and the
+    test unable to fail: a review caught that it passed against the pre-fix code.
+    """
+    decoy = tmp_path / "web"
+    decoy.mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delattr(sys, "_MEIPASS", raising=False)
+
+    # Stand in for a source checkout that has not had the UI copied into the package yet,
+    # which is the only situation where the fallback below is reached at all.
+    package_web = Path(main.__file__).resolve().parent / "web"
+    real_exists = Path.exists
+    monkeypatch.setattr(
+        Path, "exists", lambda self: False if self == package_web else real_exists(self)
+    )
+
+    resolved = main._frontend_dist()
     assert resolved.is_absolute(), f"{resolved} is relative"
+    assert resolved.resolve() != decoy.resolve(), (
+        "a web folder in the working directory was picked up as the frontend"
+    )
 
 
 def test_a_refused_setting_is_a_422_not_a_500():

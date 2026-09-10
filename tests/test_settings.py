@@ -8,6 +8,7 @@ first thing worth pinning down in tests.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -164,3 +165,109 @@ def test_a_legacy_value_on_disk_still_loads(isolated_settings):
     cfg = settings_module.load()
     assert cfg["exiftool_path"] == r"C:\evil\payload.exe"
     assert cfg["theme"] == "dark"
+
+
+# --- the UNC spellings a security review demonstrated ---------------------------------
+#
+# The first version of this check tested two literal prefixes, "\\\\" and "//". Windows folds
+# / and \ together before classifying a path, so both spellings below are the same UNC path to
+# the OS while starting with neither, and CreateProcess was shown to execute through the mixed
+# form. Refusing them lexically also matters for a second reason: letting one reach is_file()
+# makes this process open an SMB or WebDAV connection to a host the caller named.
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        # The plain spellings.
+        "\\\\attacker.example\\pub\\exiftool.exe",
+        "//attacker.example/pub/exiftool.exe",
+        # The mixed ones. Windows folds / and \ together before classifying a path, so these
+        # are the same UNC path to the OS while starting with neither "\\\\" nor "//".
+        "/\\attacker.example\\pub\\exiftool.exe",
+        "\\/attacker.example/pub/exiftool.exe",
+        # WebDAV over 443, which reaches off the local network entirely.
+        "/\\attacker.example@SSL@443\\DavWWWRoot\\exiftool.exe",
+        # The extended-length prefix.
+        "\\\\?\\UNC\\attacker.example\\pub\\exiftool.exe",
+    ],
+)
+def test_no_spelling_of_a_network_path_is_accepted(isolated_settings, spelling):
+    with pytest.raises(settings_module.SettingsError) as exc:
+        settings_module.save({"exiftool_path": spelling})
+    assert "network" in str(exc.value).lower(), (
+        f"{spelling!r} was refused, but for the wrong reason: {exc.value}"
+    )
+
+
+def test_a_network_path_is_refused_without_touching_the_network(monkeypatch):
+    """The refusal must be lexical. If it reaches is_file() the process has already opened a
+    connection to a host the caller chose, which is both an NTLM leak and a blocking call."""
+    touched = []
+    monkeypatch.setattr(
+        Path, "is_file", lambda self: touched.append(self) or False
+    )
+    with pytest.raises(settings_module.SettingsError):
+        settings_module.validate_exiftool_path("/\\attacker.example\\pub\\exiftool.exe")
+    assert touched == [], f"the filesystem was consulted for a network path: {touched}"
+
+
+# --- the real ExifTool download is not called exiftool.exe ----------------------------
+
+
+@pytest.mark.parametrize("filename", ["exiftool.exe", "exiftool(-k).exe", "exiftool-13.10_64.exe"])
+def test_the_shapes_exiftool_actually_ships_as_are_accepted(isolated_settings, tmp_path, filename):
+    tool = tmp_path / filename
+    tool.write_bytes(b"MZ")
+    settings_module.save({"exiftool_path": str(tool)})
+    assert settings_module.load()["exiftool_path"] == str(tool)
+
+
+@pytest.mark.parametrize("filename", ["cmd.exe", "powershell.exe", "payload.exe", "tool.exe"])
+def test_something_that_is_not_exiftool_is_still_refused(isolated_settings, tmp_path, filename):
+    other = tmp_path / filename
+    other.write_bytes(b"MZ")
+    with pytest.raises(settings_module.SettingsError):
+        settings_module.save({"exiftool_path": str(other)})
+
+
+# --- one stale field must not block saving every other field --------------------------
+
+
+def test_a_legacy_value_left_alone_does_not_block_an_unrelated_save(isolated_settings):
+    """The Settings dialog posts the whole draft, so validating every field meant a legacy
+    ExifTool path made it impossible to change the theme or paste an API key."""
+    isolated_settings.parent.mkdir(parents=True, exist_ok=True)
+    isolated_settings.write_text(
+        json.dumps({"exiftool_path": r"C:\legacy\notexiftool.exe", "theme": "system"}),
+        encoding="utf-8",
+    )
+    stored = settings_module.load()
+    settings_module.save({**stored, "theme": "dark"})
+    assert settings_module.load()["theme"] == "dark"
+
+
+def test_changing_that_same_field_is_still_checked(isolated_settings):
+    isolated_settings.parent.mkdir(parents=True, exist_ok=True)
+    isolated_settings.write_text(
+        json.dumps({"exiftool_path": r"C:\legacy\notexiftool.exe"}), encoding="utf-8"
+    )
+    stored = settings_module.load()
+    with pytest.raises(settings_module.SettingsError):
+        settings_module.save({**stored, "exiftool_path": r"C:\Windows\System32\cmd.exe"})
+
+
+# --- values a real HTTP client would reject ------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://localhost:notaport/v1/",
+        "ht\ttps://attacker.example/v1/",
+        "\x00https://attacker.example/",
+    ],
+)
+def test_an_endpoint_that_only_looks_valid_is_refused(isolated_settings, url):
+    with pytest.raises(settings_module.SettingsError):
+        settings_module.save({"claude_base_url": url})

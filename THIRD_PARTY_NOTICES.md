@@ -150,8 +150,8 @@ cover; `packaging/app.spec` now excludes them and the exclusion is checked befor
   humanfriendly, charset-normalizer, azure-core, azure-identity,
   azure-ai-documentintelligence, azure-ai-contentunderstanding, msal, PyJWT, et_xmlfile,
   bottle, proxy_tools, setuptools.
-- **BSD (2-Clause and 3-Clause):** lxml, pandas, starlette, uvicorn, click, idna, httpx,
-  httpcore, websockets, pywebview, mammoth, cobble, olefile, xlrd, xlsxwriter, sympy, mpmath,
+- **BSD (2-Clause and 3-Clause):** lxml, pandas, starlette, uvicorn, click, idna, httpx2,
+  httpcore2, websockets, pywebview, mammoth, cobble, olefile, xlrd, xlsxwriter, sympy, mpmath,
   python-dotenv, psutil, pycparser, isodate, colorama, pyreadline3, pywin32-ctypes, and
   SpeechRecognition's own code.
 - **Apache-2.0:** magika, openai, requests, flatbuffers, tzdata, python-multipart,

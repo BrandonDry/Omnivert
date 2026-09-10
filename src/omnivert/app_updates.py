@@ -81,7 +81,8 @@ _state: Dict[str, object] = {
 # host and GitHub answered 404, but a settings field that becomes part of a URL should be
 # shaped like the thing it claims to be.
 _REPO_RE = re.compile(
-    r"^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}$"
+    r"^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?"
+    r"/(?=[A-Za-z0-9._-]{1,100}$)[A-Za-z0-9._-]*[A-Za-z0-9_-][A-Za-z0-9._-]*$"
 )
 
 
