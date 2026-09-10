@@ -13,8 +13,11 @@ name: CI
 on:
   push:
     branches: ["main"]
+  # Deliberately NOT filtered by base branch. A `branches:` filter here matches the branch a
+  # pull request TARGETS, so filtering to main silently skipped every stacked pull request,
+  # which is precisely the shape a change too large for one review arrives in. Found the hard
+  # way: the follow-up security pull request opened green with no checks having run at all.
   pull_request:
-    branches: ["main"]
   workflow_dispatch:
 
 permissions:
