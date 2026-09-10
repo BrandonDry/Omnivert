@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-10
+
 ### Fixed
 
 - **Image captioning now works on a clean install.** The "Describe images with Claude"
@@ -62,7 +64,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A CI workflow.** Pull requests previously ran only dependency review and the labeler: no
   tests, no typecheck, no lint. `ci.yml` now runs the Python suite on 3.11 and 3.12 plus the
   frontend typecheck, build and lint on every push and pull request, and both `release.yml`
-  and `engine-update.yml` run the suite before building anything.
+  and `engine-update.yml` run the suite before building anything. The README gains a CI badge.
+
+### Documentation
+
+- **SECURITY.md overstated the loopback Host guard.** It read as "a website cannot reach the
+  local API", which is true of DNS rebinding and misleading about everything else: a page can
+  address `127.0.0.1` directly and the guard must allow it, because that is how the app's own
+  UI talks to the API. The section now states the residual and its bound (no cross-origin
+  allow header, so a hostile page cannot read any response) and what would close it properly.
+- **RELEASING.md** still warned that the release workflow was unvalidated, four releases after
+  it was validated, and never mentioned that releases are created as a **draft** that a
+  maintainer must publish. It also had no CHANGELOG step.
+- **Nothing told a contributor the test suite exists.** The word `pytest` appeared in no
+  document in the repo. CONTRIBUTING, README, CLAUDE.md and the pull request template now all
+  run it, and CONTRIBUTING names CI so a contributor knows what will fail if they skip it.
+- `CLAUDE.md` gains a Testing section, the newer modules in its architecture map, the
+  `service.batch()` contract a new conversion route can silently break, and a note recording
+  that `openai` is Omnivert's own dependency rather than the engine's, so a future dependency
+  tidy-up does not delete it and reship the captioning bug.
+- The bug report template now asks for the Capabilities dialog, which turns a class of
+  "conversion failed" reports into a one-line diagnosis.
+- Em and en dashes removed from every tracked file. Three UI placeholders that rendered a
+  bare dash for a missing value now name what is missing instead.
 
 ## [0.1.4] - 2026-07-30
 
@@ -135,7 +159,8 @@ Initial public release.
 - Release artifacts include the Python wheel and a published `SHA256SUMS` file as an interim
   integrity measure (code signing is a planned follow-up; see SECURITY.md).
 
-[Unreleased]: https://github.com/BrandonDry/Omnivert/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/BrandonDry/Omnivert/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/BrandonDry/Omnivert/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/BrandonDry/Omnivert/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/BrandonDry/Omnivert/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/BrandonDry/Omnivert/compare/v0.1.1...v0.1.2
