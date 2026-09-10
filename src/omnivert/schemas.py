@@ -176,18 +176,29 @@ class DependencyInfo(BaseModel):
     name: str
     installed: bool
     version: Optional[str] = None
+    gates: Optional[str] = Field(
+        default=None, description="Which converter this distribution enables."
+    )
 
 
 class FormatInfo(BaseModel):
     label: str
     extensions: List[str]
     note: Optional[str] = None
+    requires: List[str] = Field(
+        default_factory=list,
+        description="Distributions that must import for this format to work.",
+    )
+    available: bool = Field(
+        default=True,
+        description="False when a distribution in ``requires`` is missing, so the UI can "
+        "show a format as broken instead of silently advertising it.",
+    )
 
 
 class CapabilitiesResponse(BaseModel):
     engine_version: Optional[str]
     python_version: str
     ffmpeg_available: bool
-    youtube_available: bool
     dependencies: List[DependencyInfo]
     formats: List[FormatInfo]

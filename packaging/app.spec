@@ -133,17 +133,19 @@ for dist_name in (
     "pdfminer.six",
     "pdfplumber",
     "mammoth",
+    "lxml",
     "python-pptx",
     "openpyxl",
     "xlrd",
-    "magika",
-    "Pillow",
+    "pandas",
+    "olefile",
     "pydub",
     "SpeechRecognition",
     "azure-ai-documentintelligence",
     "azure-ai-contentunderstanding",
+    "azure-identity",
     "openai",
-    "youtube-transcript-api",
+    "magika",
 ):
     datas += safe_copy_metadata(dist_name)
 

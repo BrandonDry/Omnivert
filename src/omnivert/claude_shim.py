@@ -22,7 +22,7 @@ def build_llm_client(api_key: str, base_url: str | None = None) -> Any:
         raise RuntimeError("No Claude API key configured. Add one in Settings.")
     try:
         from openai import OpenAI
-    except ImportError as exc:  # pragma: no cover - openai ships with markitdown[all]
+    except ImportError as exc:  # pragma: no cover - declared in pyproject; see note there
         raise RuntimeError(
             "The 'openai' package is required for image captioning but is not installed."
         ) from exc

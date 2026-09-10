@@ -95,19 +95,24 @@ export interface DependencyInfo {
   name: string
   installed: boolean
   version?: string | null
+  /** Which converter this distribution enables, e.g. "Word .docx". */
+  gates?: string | null
 }
 
 export interface FormatInfo {
   label: string
   extensions: string[]
   note?: string | null
+  /** Distributions that must import for this format to work. */
+  requires: string[]
+  /** False when something in `requires` is missing, so a broken format isn't advertised. */
+  available: boolean
 }
 
 export interface CapabilitiesResponse {
   engine_version: string | null
   python_version: string
   ffmpeg_available: boolean
-  youtube_available: boolean
   dependencies: DependencyInfo[]
   formats: FormatInfo[]
 }
@@ -118,6 +123,7 @@ export interface Settings {
   docintel_endpoint: string
   docintel_key: string
   docintel_api_version: string
+  docintel_file_types: string[]
   cu_endpoint: string
   cu_key: string
   cu_analyzer_id: string

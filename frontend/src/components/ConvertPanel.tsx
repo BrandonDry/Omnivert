@@ -45,7 +45,8 @@ import type { ConversionResult, ConvertOptions } from "@/lib/types"
 
 type Mode = "file" | "folder" | "url" | "text"
 
-const TEXT_EXTENSIONS = [".txt", ".md", ".html", ".csv", ".json", ".xml", ".rss"]
+// Mirrors what the pinned engine accepts for pasted text (see capabilities._FORMAT_SPECS).
+const TEXT_EXTENSIONS = [".txt", ".md", ".html", ".csv", ".json", ".jsonl", ".xml", ".rss", ".atom"]
 
 interface Props {
   options: ConvertOptions
@@ -53,7 +54,6 @@ interface Props {
   claudeKeySet: boolean
   azureDocIntelReady: boolean
   azureContentUnderstandingReady: boolean
-  youtubeAvailable: boolean
 }
 
 export function ConvertPanel({
@@ -62,7 +62,6 @@ export function ConvertPanel({
   claudeKeySet,
   azureDocIntelReady,
   azureContentUnderstandingReady,
-  youtubeAvailable,
 }: Props) {
   const [mode, setMode] = useState<Mode>("file")
   const [files, setFiles] = useState<File[]>([])
@@ -327,10 +326,7 @@ export function ConvertPanel({
             }}
           />
           <p className="text-xs text-muted-foreground">
-            Webpages, Wikipedia, and RSS feeds work out of the box.{" "}
-            {youtubeAvailable
-              ? "YouTube transcript extraction is available."
-              : "YouTube transcript extraction is not installed."}
+            Webpages, Wikipedia, RSS and Atom feeds work out of the box.
           </p>
         </TabsContent>
 

@@ -227,6 +227,23 @@ export function SettingsDialog({ children, onSaved }: Props) {
                   />
                 </Field>
               </div>
+              <Field
+                label="File types"
+                hint="Comma-separated extensions to route through this backend. Empty = all."
+              >
+                <Input
+                  placeholder=".pdf, .png"
+                  value={draft.docintel_file_types.join(", ")}
+                  onChange={(e) =>
+                    patch({
+                      docintel_file_types: e.target.value
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+              </Field>
             </section>
 
             <Separator />

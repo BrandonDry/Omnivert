@@ -176,8 +176,13 @@ The installer is written to `dist/installer/`. Release automation is documented 
 - Non-WAV audio conversion needs `ffmpeg` on `PATH`. Without it, the engine emits a
   non-fatal warning and audio conversion can be limited.
 - The `markitdown[all]` extra is intentionally not used here because the YouTube extra has
-  Python-version caveats. YouTube URL support may still work if a compatible
-  `youtube-transcript-api` is present in the environment.
+  Python-version caveats. YouTube transcript extraction is therefore **not** available in
+  installed builds, and the UI no longer advertises it. Running from a checkout, you can
+  still add a compatible `youtube-transcript-api` to the environment yourself.
+- The Capabilities dialog marks a format **unavailable** when the dependency that gates it
+  fails to import, and names the dependency. Every dependency it lists ships with Omnivert,
+  so anything reported missing means a damaged install rather than a normal state: reinstall
+  to repair it.
 - Claude image captions and Azure Document Intelligence/Content Understanding require valid
   keys in Settings. The API redacts stored secrets on read.
 

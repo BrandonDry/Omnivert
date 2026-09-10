@@ -1,5 +1,22 @@
 """Report what this conversion engine can actually do: version, optional dependencies,
-ffmpeg availability, YouTube extra availability, and the supported-format table."""
+ffmpeg availability, and the supported-format table.
+
+The format table and the dependency list are both derived from the engine version pinned in
+``pyproject.toml`` (markitdown 0.1.7). Two rules keep this honest:
+
+1. Every extension listed here is one the pinned engine's converters actually accept. The
+   lists were read off the converters' ``ACCEPTED_FILE_EXTENSIONS``, not from memory. An
+   earlier version of this table under-reported ``.markdown``, ``.text``, ``.jsonl`` and
+   ``.atom``, and advertised YouTube support that the pin cannot deliver.
+2. Every dependency listed here is one our pin actually installs, so anything reported
+   ``missing`` is a genuinely broken install rather than a normal state. That matters on
+   Windows, where a cloud-sync layer can dehydrate files and break imports for packages that
+   are nominally present (see CLAUDE.md's environment caveat).
+
+``_OPTIONAL_DEPS`` must stay in sync with the ``copy_metadata`` list in
+``packaging/app.spec``, or the frozen build reports ``None`` for every version.
+``tests/test_capabilities.py`` enforces that; do not rely on remembering it.
+"""
 
 from __future__ import annotations
 
@@ -11,42 +28,50 @@ from typing import List
 
 from .schemas import CapabilitiesResponse, DependencyInfo, FormatInfo
 
-# Optional dependencies that gate specific converters, with a friendly label.
+# (distribution name, importable module, which converter it gates). Every entry is pulled in
+# by the curated extras pinned in pyproject.toml, plus openai, which is our own direct
+# dependency for Claude captioning (markitdown does not pull it in under any extra).
 _OPTIONAL_DEPS = [
     ("pdfminer.six", "pdfminer", "PDF"),
     ("pdfplumber", "pdfplumber", "PDF (tables/layout)"),
     ("mammoth", "mammoth", "Word .docx"),
+    ("lxml", "lxml", "Word .docx"),
     ("python-pptx", "pptx", "PowerPoint .pptx"),
     ("openpyxl", "openpyxl", "Excel .xlsx"),
     ("xlrd", "xlrd", "Excel .xls"),
-    ("magika", "magika", "content-based type detection"),
-    ("Pillow", "PIL", "images"),
+    ("pandas", "pandas", "Excel tables"),
+    ("olefile", "olefile", "Outlook .msg"),
     ("pydub", "pydub", "audio decoding"),
     ("SpeechRecognition", "speech_recognition", "audio transcription"),
     ("azure-ai-documentintelligence", "azure.ai.documentintelligence", "Azure Document Intelligence"),
     ("azure-ai-contentunderstanding", "azure.ai.contentunderstanding", "Azure Content Understanding"),
-    ("openai", "openai", "LLM image captioning"),
-    ("youtube-transcript-api", "youtube_transcript_api", "YouTube transcription"),
+    ("azure-identity", "azure.identity", "Azure authentication"),
+    ("openai", "openai", "Claude image captioning"),
+    ("magika", "magika", "content-based type detection"),
 ]
 
-# Curated supported-format table (built-in converters).
-_FORMATS = [
-    FormatInfo(label="PDF", extensions=[".pdf"]),
-    FormatInfo(label="Word", extensions=[".docx"]),
-    FormatInfo(label="PowerPoint", extensions=[".pptx"]),
-    FormatInfo(label="Excel", extensions=[".xlsx", ".xls"]),
-    FormatInfo(label="Images", extensions=[".jpg", ".jpeg", ".png"], note="EXIF/OCR; Claude captions optional"),
-    FormatInfo(label="Audio", extensions=[".wav", ".mp3", ".m4a", ".mp4"], note="Non-WAV needs ffmpeg"),
-    FormatInfo(label="HTML", extensions=[".html", ".htm"]),
-    FormatInfo(label="CSV", extensions=[".csv"]),
-    FormatInfo(label="JSON", extensions=[".json"]),
-    FormatInfo(label="XML / RSS", extensions=[".xml", ".rss"]),
-    FormatInfo(label="EPUB", extensions=[".epub"]),
-    FormatInfo(label="Outlook message", extensions=[".msg"]),
-    FormatInfo(label="Jupyter notebook", extensions=[".ipynb"]),
-    FormatInfo(label="ZIP archive", extensions=[".zip"], note="Recursively converts contents"),
-    FormatInfo(label="Plain text", extensions=[".txt", ".md"]),
-    FormatInfo(label="URLs", extensions=["http://", "https://"], note="Webpages, Wikipedia, Bing, YouTube pages"),
+# Supported formats, with the distributions that gate each one. ``requires`` names entries in
+# _OPTIONAL_DEPS; an empty list means the engine's core dependencies already cover it.
+_FORMAT_SPECS = [
+    ("PDF", [".pdf"], ["pdfminer.six", "pdfplumber"], None),
+    ("Word", [".docx"], ["mammoth", "lxml"], None),
+    ("PowerPoint", [".pptx"], ["python-pptx"], None),
+    ("Excel", [".xlsx"], ["openpyxl", "pandas"], None),
+    ("Excel 97-2003", [".xls"], ["xlrd", "pandas"], None),
+    ("Outlook message", [".msg"], ["olefile"], None),
+    ("Audio", [".wav", ".mp3", ".m4a", ".mp4"], ["pydub", "SpeechRecognition"],
+     "Transcription; anything but .wav also needs ffmpeg"),
+    ("Images", [".jpg", ".jpeg", ".png"], [],
+     "EXIF metadata via exiftool; Claude captions optional"),
+    ("HTML", [".html", ".htm"], [], None),
+    ("CSV", [".csv"], [], None),
+    ("JSON", [".json", ".jsonl"], [], None),
+    ("XML / RSS / Atom", [".xml", ".rss", ".atom"], [], None),
+    ("EPUB", [".epub"], [], None),
+    ("Jupyter notebook", [".ipynb"], [], None),
+    ("ZIP archive", [".zip"], [], "Recursively converts contents"),
+    ("Plain text", [".txt", ".text", ".md", ".markdown"], [], None),
+    ("URLs", ["http://", "https://"], [], "Webpages, Wikipedia, and Bing results pages"),
 ]
 
 
@@ -66,20 +91,40 @@ def _safe_version(dist_name: str) -> str | None:
 
 def get_capabilities() -> CapabilitiesResponse:
     deps: List[DependencyInfo] = []
-    youtube_available = False
-    for dist_name, module_name, _label in _OPTIONAL_DEPS:
-        installed = _is_importable(module_name)
-        if dist_name == "youtube-transcript-api":
-            youtube_available = installed
+    installed: dict[str, bool] = {}
+    for dist_name, module_name, gates in _OPTIONAL_DEPS:
+        present = _is_importable(module_name)
+        installed[dist_name] = present
         deps.append(
-            DependencyInfo(name=dist_name, installed=installed, version=_safe_version(dist_name))
+            DependencyInfo(
+                name=dist_name,
+                installed=present,
+                version=_safe_version(dist_name),
+                gates=gates,
+            )
+        )
+
+    ffmpeg = shutil.which("ffmpeg") is not None
+
+    formats: List[FormatInfo] = []
+    for label, extensions, requires, note in _FORMAT_SPECS:
+        # A format is usable when every distribution gating it imports. Audio is the one
+        # case with a non-Python gate too: only .wav decodes without ffmpeg on the PATH.
+        available = all(installed.get(dist, False) for dist in requires)
+        formats.append(
+            FormatInfo(
+                label=label,
+                extensions=extensions,
+                note=note,
+                requires=requires,
+                available=available,
+            )
         )
 
     return CapabilitiesResponse(
         engine_version=_safe_version("markitdown"),
         python_version=platform.python_version(),
-        ffmpeg_available=shutil.which("ffmpeg") is not None,
-        youtube_available=youtube_available,
+        ffmpeg_available=ffmpeg,
         dependencies=deps,
-        formats=_FORMATS,
+        formats=formats,
     )

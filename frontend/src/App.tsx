@@ -135,7 +135,6 @@ function App() {
           claudeKeySet={claudeKeySet}
           azureDocIntelReady={azureDocIntelReady}
           azureContentUnderstandingReady={azureContentUnderstandingReady}
-          youtubeAvailable={!!caps?.youtube_available}
         />
       </main>
     </div>
