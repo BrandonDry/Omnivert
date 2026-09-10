@@ -33,9 +33,12 @@ export function Header({
         <img src="/favicon.svg" alt="" className="size-7" />
         <div className="flex flex-1 items-center gap-2">
           <h1 className="text-base font-semibold tracking-tight">Omnivert</h1>
+          {/* This is the conversion ENGINE version, not Omnivert's. Unlabelled, it was
+              read as the app version and reported as such in bug reports. Omnivert's own
+              version lives in the Updates dialog. */}
           {caps?.engine_version && (
-            <Badge variant="muted" className="font-mono">
-              v{caps.engine_version}
+            <Badge variant="muted" className="font-mono" title="Bundled conversion engine version">
+              engine v{caps.engine_version}
             </Badge>
           )}
         </div>

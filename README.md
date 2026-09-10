@@ -172,7 +172,10 @@ npm run build --prefix frontend
 python scripts\copy_web_assets.py
 python -m pip install -e ".[build]"
 pyinstaller packaging\app.spec --noconfirm --clean
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion="0.1.5" packaging\installer.iss
+
+# The installer version is required, not defaulted, so read it from the single source of truth
+$v = (Select-String -Path src\omnivert\app_version.py -Pattern '__version__ = "([^"]+)"').Matches[0].Groups[1].Value
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion="$v" packaging\installer.iss
 ```
 
 The installer is written to `dist/installer/`. Release automation is documented in
@@ -203,7 +206,10 @@ Omnivert's document conversion is powered by **Microsoft
 Microsoft Corporation). Omnivert bundles and runs MarkItDown but is an **independent
 project and is not affiliated with, endorsed by, or sponsored by Microsoft**.
 
-Full third-party license texts are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Third-party licensing and attribution are documented in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), which reproduces MarkItDown's MIT
+licence in full, names every bundled component that is not permissively licensed, and says
+where the rest of the licence texts sit inside an installation.
 
 ## License
 

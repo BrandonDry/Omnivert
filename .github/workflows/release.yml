@@ -11,8 +11,10 @@ on:
         required: false
         type: string
 
+# Granted per job rather than here. The guard job only reads, and the release job is the
+# only thing that needs to create a release.
 permissions:
-  contents: write
+  contents: read
 
 # One release build per version at a time. Don't cancel in-progress builds: a tag-push
 # that arrives mid-build should queue, not kill the run that may be uploading assets.
@@ -26,6 +28,8 @@ jobs:
   # to draft). Skip the build when a *published* release already exists for this tag.
   guard:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       skip: ${{ steps.check.outputs.skip }}
     steps:
@@ -53,9 +57,18 @@ jobs:
     needs: guard
     if: needs.guard.outputs.skip != 'true'
     runs-on: windows-latest
+    permissions:
+      contents: write  # creates the release and uploads its assets
 
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          # Nothing in this job talks to git over the network, and the steps below run
+          # lifecycle code from every npm and pip dependency. Leaving a token that can push
+          # commits and publish releases sitting in .git/config while that happens gives any
+          # one malicious transitive dependency write access to the repository that builds
+          # the binary users download.
+          persist-credentials: false
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:

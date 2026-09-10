@@ -262,3 +262,53 @@ def test_every_conversion_route_releases_its_engine():
         assert "batch" in body, f"route {routes[0]} does not wrap its work in service.batch()"
 
     assert len(checked) >= 5, f"expected to find every convert route, found {checked}"
+
+
+# --- settings that decide where a key goes, re-checked at the point of use -----------
+#
+# settings.save validates on write, but settings.load deliberately does not, so a
+# settings.json written by 0.1.5 or earlier is exactly the file that would otherwise hand
+# http://attacker.example/ and an AzureKeyCredential straight to the engine. A review found
+# the Azure pair unchecked while claude_base_url was checked, so all four are pinned here.
+
+
+@pytest.mark.parametrize(
+    "field, backend, opts_kwargs",
+    [
+        ("claude_base_url", None, {"describe_images": True}),
+        ("docintel_endpoint", "docintel", {"azure_backend": "docintel"}),
+        ("cu_endpoint", "cu", {"azure_backend": "cu"}),
+    ],
+)
+def test_a_legacy_endpoint_is_refused_at_the_point_of_use(
+    monkeypatch, field, backend, opts_kwargs
+):
+    cfg = {
+        field: "http://attacker.example/",
+        "claude_api_key": "sk-ant-test",
+        "docintel_key": "azure-test",
+        "cu_key": "azure-test",
+    }
+    monkeypatch.setattr(settings_module, "load", lambda: dict(cfg))
+    service = ConversionService()
+    with pytest.raises(RuntimeError) as exc:
+        service._construct(cfg, ConvertOptions(**opts_kwargs))
+    assert field in str(exc.value)
+
+
+def test_an_unusable_exiftool_path_is_dropped_rather_than_failing_every_conversion(
+    monkeypatch, tmp_path
+):
+    """A stale path must not break plain text conversion, which it never did before: the
+    engine only reaches ExifTool from the image and audio converters."""
+    cfg = {"exiftool_path": str(tmp_path / "gone" / "payload.exe")}
+    monkeypatch.setattr(settings_module, "load", lambda: dict(cfg))
+    captured = {}
+
+    def fake_engine(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr("omnivert.conversion.Engine", fake_engine)
+    ConversionService()._construct(cfg, ConvertOptions())
+    assert "exiftool_path" not in captured, "an unusable path was handed to the engine"

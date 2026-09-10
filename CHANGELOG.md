@@ -7,6 +7,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-09-10
+
+0.1.4 and 0.1.5 were both built and never published, so everything in their sections below
+reaches users for the first time here. Coming from 0.1.3, this release carries all three:
+0.1.4's conversion engine bump to MarkItDown 0.1.7, 0.1.5's security fixes, and this.
+
+### Security
+
+- **The packaged app no longer serves its own API documentation.** `/docs` and `/redoc` are
+  not self-contained pages: each loads its real JavaScript from `cdn.jsdelivr.net`. In a
+  frozen build that meant Omnivert fetching remote script into the very origin its
+  unauthenticated local API trusts, reachable by a single same-origin navigation, and a
+  converted document's Markdown preview renders links. `/openapi.json` handed any local caller
+  the whole route surface for no benefit, since nothing in the UI reads it. All three are off
+  in packaged builds and unchanged in development. Confirmed against the frozen build, not
+  just the source.
+- **Four Settings fields were execution, not configuration, and are now checked.**
+  `exiftool_path` is handed to the conversion engine, which runs it as a program
+  (`subprocess.run([it, "-ver"])`), so a write to the local API followed by any image
+  conversion ran a program of the caller's choosing as you. Reproduced with a batch file that
+  wrote a marker naming the logged-in user. It must now be a real local file whose name
+  starts with `exiftool` and ends in `.exe` (so the official `exiftool(-k).exe` download
+  works as-is), and never a network path, checked before anything touches the filesystem so
+  a network path cannot make Omnivert reach out to a host a caller named. Separately,
+  `claude_base_url`,
+  `docintel_endpoint` and `cu_endpoint` decide which server receives the matching API key, so
+  repointing one exfiltrated the key that reading settings back carefully redacts; they must
+  now be `https`, or plain `http` only on this machine, which keeps a local gateway working.
+  Rejections are reported as a 422 naming the field. All four are re-checked again at the
+  point of use, because loading settings deliberately does not validate, so a file written
+  by an older build is exactly the case that would otherwise slip past the write-time check.
+- **Narrowed, not closed, and worth being exact about.** Someone who can reach the local API
+  can still point an endpoint at an `https` host they control. A website cannot reach it, and
+  that is tested; local code can, which for same-user malware changes nothing and on a machine
+  with more than one account is a real escalation, because Windows loopback is not isolated
+  per user. The per-session token in SECURITY.md remains the fix for the whole class.
+- The release workflow no longer leaves a repository-write token in the workspace while `npm
+  ci` and `pip install` run lifecycle code from around a hundred upstream packages
+  (`persist-credentials: false`), and its permissions are granted per job instead of to the
+  whole workflow.
+
+### Fixed
+
+- **A folder pick could hang the app before the file limit applied.** The 1000-file cap was
+  checked after walking the entire tree, so on a drive root the walk itself was the hang the
+  cap claimed to prevent. It now stops one file past the limit, and the message no longer
+  reports a total it did not count.
+- **The static frontend could be served from the wrong directory.** With `sys._MEIPASS`
+  unset, the fallback resolved to the relative path `web`, taken from the working directory,
+  so running from a checkout in a folder that happened to contain a `web` directory would
+  mount it as the app's UI. Both the API and the launcher now require `_MEIPASS` to be set
+  before using it.
+- **Frozen builds no longer shell out to `git`.** The commit lookup meant nothing inside a
+  bundle (measured: a build made inside a checkout reported that checkout's HEAD), and a
+  windowed build spawning a console process risks flashing a console window at the user.
+- The version badge in the header now reads **engine v0.1.7** rather than a bare version.
+  Unlabelled, it was Omnivert's most visible number and it was not Omnivert's; bug reports
+  cited it as the app version. Omnivert's own version is in the Updates dialog.
+- The release asset allowlist refuses `..` outright. A bare prefix test accepted a URL that
+  climbed back out of the pinned repository, which no real GitHub asset URL can produce, but
+  this is the one gate deciding which executable gets launched.
+- The update repository setting is validated against the shape GitHub actually allows,
+  instead of being accepted on holding exactly one slash.
+
+### Changed
+
+- **A saved setting may now be refused when you next open Settings.** The checks above are
+  applied on save, so a value that was accepted before can be rejected now: an ExifTool path
+  that is not an `exiftool*.exe` file on this machine, or a cloud endpoint on plain `http`
+  to anything other than this machine. Only a field you actually change is checked, so an
+  older value you leave alone will not block you from saving anything else, and the dialog
+  shows exactly what is wrong when it does refuse one.
+  Conversions themselves are unaffected: an unusable ExifTool path is simply ignored, the
+  same position a broken path already left you in, and a refused cloud endpoint only stops
+  the cloud backend you selected.
+- **The download is smaller, and no longer carries the build tool that made it.** The frozen
+  executable embedded PyInstaller's own build modules, all of `pytest`, and the whole of
+  `pygments`: 447 modules of build-time tooling in a binary that never invokes a build tool.
+  They arrived through pywebview's own PyInstaller hook. Beyond the dead weight, PyInstaller
+  is GPL-2.0-or-later and its bootloader exception does not cover those modules, so an
+  Apache-2.0 binary was shipping GPL code with no licence text alongside it. The executable
+  drops from 33.6 MB to 30.6 MB.
+- **`THIRD_PARTY_NOTICES.md` is accurate now.** It claimed every bundled component was
+  permissively licensed. Four are not: certifi is MPL-2.0, the FLAC binaries used for audio
+  transcription are GPLv2, Eigen compiled into onnxruntime is MPL-2.0, and the WebView2
+  assemblies are proprietary Microsoft components (redistributable, but not open source).
+  Each is now named with what it actually requires, and the file says where to find licence
+  text in an install and which components ship without any. None of it affects your right to
+  use Omnivert, and none conflicts with its Apache-2.0 licence.
+- The Inno Setup script no longer defaults the version. It went stale two releases running,
+  and because the version names the output file, a local build of 0.1.5 silently produced
+  `Omnivert-Setup-0.1.3.exe`. A compile without `/DMyAppVersion` now fails and says so.
+- The published package summary was circular ("A Windows desktop GUI for Omnivert document
+  conversion"), a leftover from the rename, and now describes what the app does.
+- The Python 3.13 classifier is gone. CI runs 3.11 and 3.12; advertising a version nothing
+  tests is how a supported version quietly breaks.
+
 ## [0.1.5] - 2026-09-10
 
 ### Security
@@ -191,7 +288,8 @@ Initial public release.
 - Release artifacts include the Python wheel and a published `SHA256SUMS` file as an interim
   integrity measure (code signing is a planned follow-up; see SECURITY.md).
 
-[Unreleased]: https://github.com/BrandonDry/Omnivert/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/BrandonDry/Omnivert/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/BrandonDry/Omnivert/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/BrandonDry/Omnivert/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/BrandonDry/Omnivert/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/BrandonDry/Omnivert/compare/v0.1.2...v0.1.3

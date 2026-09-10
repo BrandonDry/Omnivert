@@ -451,3 +451,29 @@ def test_an_up_to_date_build_refuses_to_install_anything(monkeypatch):
     assert "up to date" in str(result["message"]).lower()
     assert started == [], f"an up-to-date build still launched an installer: {started}"
 
+
+def test_a_traversing_asset_url_is_refused():
+    """A bare prefix test accepted a URL that climbed back out of the pinned repository. Not
+    reachable through a real GitHub asset URL, but this is the gate that decides which
+    executable gets launched, so it should not read as stronger than it is."""
+    assert not app_updates.release_asset_allowed(
+        f"https://github.com/{DEFAULT_APP_REPO}/releases/download/../../../attacker/evil/x.exe"
+    )
+
+
+@pytest.mark.parametrize(
+    "repo,accepted",
+    [
+        ("BrandonDry/Omnivert", True),
+        ("owner/repo", False),          # the placeholder default
+        ("a/..%2Fb", False),            # survived the old "exactly one slash" test
+        ("owner/repo/extra", False),
+        ("/leading", False),
+        ("owner/", False),
+        ("own er/repo", False),
+        ("", False),
+    ],
+)
+def test_the_configured_repo_must_look_like_a_repo(monkeypatch, repo, accepted):
+    monkeypatch.setattr(app_updates.settings_module, "load", lambda: {"app_repo": repo})
+    assert (app_updates._repo() is not None) is accepted

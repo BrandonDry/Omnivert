@@ -7,6 +7,7 @@ builds download and launch the release ``Setup.exe``.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import threading
@@ -48,10 +49,18 @@ def release_asset_prefix() -> str:
 def release_asset_allowed(url: str) -> bool:
     """True when ``url`` is a release asset of the repo this build updates from.
 
-    A prefix test is safe here because the prefix ends inside a path GitHub controls: nobody
-    but ``DEFAULT_APP_REPO`` can serve a URL under ``github.com/<that repo>/releases/download/``.
+    A prefix test works because the prefix ends inside a path GitHub controls: nobody but
+    ``DEFAULT_APP_REPO`` can serve a URL under ``github.com/<that repo>/releases/download/``.
+    It only works on a path that cannot climb back out of that prefix, so ``..`` is refused
+    outright. A bare prefix test accepted
+    ``.../releases/download/../../../attacker/evil/x.exe``, which is not reachable through a
+    real asset URL (GitHub builds it, and a git ref cannot contain ``..``) but is a weaker
+    check than it reads as, on the one gate that decides which executable gets launched.
     """
-    return bool(url) and str(url).lower().startswith(release_asset_prefix().lower())
+    text = str(url or "")
+    if not text or ".." in text:
+        return False
+    return text.lower().startswith(release_asset_prefix().lower())
 
 _lock = threading.Lock()
 _state: Dict[str, object] = {
@@ -66,10 +75,21 @@ _state: Dict[str, object] = {
 
 # --- config --------------------------------------------------------------------------
 
+# The shape GitHub actually allows for an owner and a repository name. Checked rather than
+# counted: the old test accepted anything holding exactly one slash, so a value such as
+# "a/..%2Fb" was interpolated straight into an api.github.com path. It could not escape the
+# host and GitHub answered 404, but a settings field that becomes part of a URL should be
+# shaped like the thing it claims to be.
+_REPO_RE = re.compile(
+    r"^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?"
+    r"/(?=[A-Za-z0-9._-]{1,100}$)[A-Za-z0-9._-]*[A-Za-z0-9_-][A-Za-z0-9._-]*$"
+)
+
+
 def _repo() -> Optional[str]:
     repo = (settings_module.load().get("app_repo") or "").strip().strip("/")
     # Accept "owner/repo"; ignore blanks and the placeholder default.
-    if repo and repo.count("/") == 1 and repo.lower() != "owner/repo":
+    if repo and _REPO_RE.match(repo) and repo.lower() != "owner/repo":
         return repo
     return None
 

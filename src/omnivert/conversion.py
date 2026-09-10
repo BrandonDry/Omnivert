@@ -154,14 +154,39 @@ class ConversionService:
         # waits forever, so the guard only ever saw the URL the user typed. See url_guard.
         kwargs: Dict[str, Any] = {"requests_session": url_guard.guarded_session()}
 
+        # Re-check every setting that decides what runs or where a key goes, rather than
+        # trusting that whatever wrote settings.json checked it. ``settings.save`` validates
+        # on write, but a file written by an older build predates that check, and this is the
+        # last point before a value becomes a subprocess argument or an Authorization header.
+        #
+        # Two different responses, on purpose. An unusable ExifTool path is DROPPED, not
+        # raised: this runs for every conversion of every format, so raising would mean a
+        # stale path in settings.json broke plain text conversion, which it never did before
+        # (the engine only reaches ExifTool from the image and audio converters). Dropping it
+        # leaves the user exactly where a broken path already left them, with no ExifTool
+        # metadata, and the Settings dialog refuses the value the next time they open it.
+        # An endpoint, by contrast, is only read when the user has actively asked for that
+        # backend, and silently ignoring it would send the request somewhere they did not
+        # choose, so those raise.
         if cfg.get("exiftool_path"):
-            kwargs["exiftool_path"] = cfg["exiftool_path"]
+            try:
+                kwargs["exiftool_path"] = settings_module.validate_exiftool_path(
+                    cfg["exiftool_path"]
+                )
+            except settings_module.SettingsError:
+                pass  # unusable, so behave as though ExifTool were not configured
         if cfg.get("style_map"):
             kwargs["style_map"] = cfg["style_map"]
 
         # Claude image captioning
         if opts.describe_images:
-            client = build_llm_client(cfg.get("claude_api_key", ""), cfg.get("claude_base_url"))
+            try:
+                base_url = settings_module.validate_endpoint(
+                    "claude_base_url", cfg.get("claude_base_url")
+                )
+            except settings_module.SettingsError as exc:
+                raise RuntimeError(f"The saved Claude base URL was refused: {exc}") from exc
+            client = build_llm_client(cfg.get("claude_api_key", ""), base_url or None)
             kwargs["llm_client"] = client
             kwargs["llm_model"] = cfg.get("claude_model") or settings_module.DEFAULT_CLAUDE_MODEL
             if cfg.get("llm_prompt"):
@@ -169,7 +194,7 @@ class ConversionService:
 
         # Azure backends
         if opts.azure_backend == "docintel":
-            endpoint = (cfg.get("docintel_endpoint") or "").strip()
+            endpoint = self._checked_endpoint("docintel_endpoint", cfg)
             if not endpoint:
                 raise RuntimeError(
                     "Azure Document Intelligence endpoint is not configured. "
@@ -191,7 +216,7 @@ class ConversionService:
             if cred is not None:
                 kwargs["docintel_credential"] = cred
         elif opts.azure_backend == "cu":
-            endpoint = (cfg.get("cu_endpoint") or "").strip()
+            endpoint = self._checked_endpoint("cu_endpoint", cfg)
             if not endpoint:
                 raise RuntimeError(
                     "Azure Content Understanding endpoint is not configured. "
@@ -212,6 +237,21 @@ class ConversionService:
                 kwargs["cu_credential"] = cred
 
         return Engine(enable_plugins=opts.enable_plugins, **kwargs)
+
+    @staticmethod
+    def _checked_endpoint(field: str, cfg: Dict[str, Any]) -> str:
+        """Return a stored endpoint URL, refusing one the settings rules would not accept.
+
+        The Azure endpoints decide which server receives the matching API key, exactly as
+        ``claude_base_url`` does, so they get the same point-of-use check. They did not at
+        first, and a review caught it: ``settings.load`` deliberately does not validate, so a
+        ``settings.json`` written by 0.1.5 or earlier handed ``http://attacker.example/`` and
+        an ``AzureKeyCredential`` straight to the engine.
+        """
+        try:
+            return settings_module.validate_endpoint(field, cfg.get(field))
+        except settings_module.SettingsError as exc:
+            raise RuntimeError(f"The saved {field} was refused: {exc}") from exc
 
     @staticmethod
     def _azure_credential(key: str | None):

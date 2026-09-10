@@ -58,14 +58,33 @@ SKIPPED_BATCH_DIRS = {".git", ".venv", "__pycache__", "dist", "node_modules"}
 # Refuse a single request body larger than this (memory guard for stray huge uploads).
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
-app = FastAPI(title="Omnivert", version=APP_VERSION)
+_DEV_MODE = not getattr(sys, "frozen", False)
+
+# FastAPI's interactive docs are a dev convenience and a liability in a shipped desktop app,
+# so a frozen build serves none of the three.
+#
+# /docs and /redoc are not self-contained: each is a small HTML page that loads its real
+# JavaScript from cdn.jsdelivr.net. In a packaged build that means the app fetches remote
+# script into the very origin its unauthenticated local API trusts, which is one CDN
+# compromise away from being the worst possible place to run someone else's code. Reaching it
+# needs only a same-origin navigation, and a converted document's Markdown preview renders
+# links, so a hostile document can offer one. /openapi.json is milder but pointless here: it
+# hands any local caller the whole route surface, and nothing in the bundled UI reads it.
+#
+# Kept in dev, where the origin is already a development machine's and the docs earn their
+# keep. `tests/test_main.py` pins both halves.
+_DOCS_URLS = (
+    {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+    if _DEV_MODE
+    else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+)
+
+app = FastAPI(title="Omnivert", version=APP_VERSION, **_DOCS_URLS)
 
 # The backend is a localhost-only companion to the desktop window and has no auth: any
 # loopback client is trusted, because the only intended client is the bundled UI running
 # as the same user. Loopback names a request may legitimately carry as its Host header.
 _ALLOWED_API_HOSTS = {"127.0.0.1", "localhost", "::1"}
-
-_DEV_MODE = not getattr(sys, "frozen", False)
 
 # Origins the Vite dev server may appear as. In dev the browser loads the UI from Vite and
 # Vite proxies /api here (frontend/vite.config.ts), so a legitimate dev request arrives naming
@@ -259,12 +278,21 @@ if _DEV_MODE:
     )
 
 def _frontend_dist() -> Path:
+    """Locate the built UI: installed package, then frozen bundle, then a source checkout.
+
+    The _MEIPASS branch is guarded on the attribute actually being set. Unguarded,
+    ``Path("") / "web"`` is the RELATIVE path ``web``, resolved against the working
+    directory, so running from a checkout in a directory that happens to hold a ``web``
+    folder would mount that folder as the app's static frontend on ``/``.
+    """
     package_web = Path(__file__).resolve().parent / "web"
     if package_web.exists():
         return package_web
-    frozen_web = Path(getattr(sys, "_MEIPASS", "")) / "web"
-    if frozen_web.exists():
-        return frozen_web
+    meipass = getattr(sys, "_MEIPASS", "")
+    if meipass:
+        frozen_web = Path(meipass) / "web"
+        if frozen_web.exists():
+            return frozen_web
     return Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 
@@ -323,9 +351,11 @@ def convert_folder(req: FolderConvertRequest) -> BatchResult:
     if not files:
         raise HTTPException(status_code=400, detail="No files found in that folder.")
     if len(files) > MAX_BATCH_FILES:
+        # _list_folder stops one past the limit, so it has not counted the whole tree and
+        # must not report a total as though it had.
         raise HTTPException(
             status_code=400,
-            detail=f"Folder has {len(files)} files (limit {MAX_BATCH_FILES}). "
+            detail=f"That folder holds more than {MAX_BATCH_FILES} files. "
             "Pick a narrower folder.",
         )
 
@@ -524,7 +554,13 @@ def get_settings() -> dict:
 
 @app.put("/api/settings")
 def put_settings(incoming: dict) -> dict:
-    saved = settings_module.save(incoming)
+    try:
+        saved = settings_module.save(incoming)
+    except settings_module.SettingsError as exc:
+        # A refused value, not a crash: the message names the field and what is wrong with
+        # it, and the Settings dialog shows it. See the note above the checks in settings.py
+        # for which fields are checked and why those four are not ordinary configuration.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return settings_module.redact(saved)
 
 
@@ -539,9 +575,27 @@ def _parse_options(raw: str) -> ConvertOptions:
 
 
 def _list_folder(root: Path, recursive: bool) -> List[Path]:
-    """Return files under ``root`` while avoiding generated dependency/cache trees."""
+    """Return files under ``root``, stopping once ``MAX_BATCH_FILES`` is exceeded.
+
+    Stopping matters, and the earlier version did not. Its comment claimed the cap kept a
+    stray drive-root pick from hanging the app, but it walked the whole tree first and
+    counted afterwards, so the walk itself was the hang and the cap only produced a tidy
+    error after the damage. Generated dependency and cache trees are still skipped.
+
+    One file past the limit is collected on purpose, so the caller can tell "exactly at the
+    limit" from "over it" without having counted the rest.
+    """
+    limit = MAX_BATCH_FILES + 1
     if not recursive:
-        return sorted(p for p in root.iterdir() if p.is_file())
+        # Cap during the scan, then sort. Sorting first would materialise the whole listing,
+        # directories included, which is the cost this cap exists to avoid.
+        shallow: List[Path] = []
+        for path in root.iterdir():
+            if path.is_file():
+                shallow.append(path)
+                if len(shallow) >= limit:
+                    break
+        return sorted(shallow)
 
     files: List[Path] = []
     for current, dirnames, filenames in os.walk(root):
@@ -551,6 +605,8 @@ def _list_folder(root: Path, recursive: bool) -> List[Path]:
             path = base / name
             if path.is_file():
                 files.append(path)
+                if len(files) >= limit:
+                    return sorted(files)
     return sorted(files)
 
 

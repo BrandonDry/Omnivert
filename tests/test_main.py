@@ -439,3 +439,94 @@ def test_a_host_without_a_port_defaults_to_80():
     assert main._split_host_port("localhost") == ("localhost", 80)
     assert main._split_host_port("127.0.0.1:8765") == ("127.0.0.1", 8765)
     assert main._split_host_port("[::1]:8765") == ("::1", 8765)
+
+
+# --- the interactive API docs ---------------------------------------------------------
+#
+# /docs and /redoc are HTML pages that load their JavaScript from cdn.jsdelivr.net. A frozen
+# build serving them means the app pulls remote script into the origin its unauthenticated
+# local API trusts. Both halves are pinned: off when frozen, on in dev.
+
+
+def _docs_app(frozen: bool):
+    """Rebuild the app module with sys.frozen set the way the test needs it."""
+    import importlib
+
+    with mock.patch.object(sys, "frozen", frozen, create=True):
+        return importlib.reload(main)
+
+
+def test_a_frozen_build_serves_no_api_docs():
+    module = _docs_app(frozen=True)
+    try:
+        assert module._DEV_MODE is False
+        client = TestClient(module.app, base_url="http://127.0.0.1:8765")
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            assert client.get(path).status_code == 404, f"{path} was served by a frozen build"
+    finally:
+        _docs_app(frozen=False)
+
+
+def test_dev_keeps_the_api_docs():
+    module = _docs_app(frozen=False)
+    assert module._DEV_MODE is True
+    client = TestClient(module.app, base_url="http://127.0.0.1:8765")
+    assert client.get("/openapi.json").status_code == 200
+
+
+def test_the_frontend_path_is_never_relative(tmp_path, monkeypatch):
+    """A stray ``web`` folder in the working directory must not become the served UI.
+
+    Reproduces the actual bug rather than asserting around it. With ``sys._MEIPASS`` unset,
+    ``Path(getattr(sys, "_MEIPASS", "")) / "web"`` is the RELATIVE path ``web``, and
+    ``.exists()`` on it asks the working directory. An earlier version of this test patched
+    ``Path.exists`` to always return False, which made the buggy branch unreachable and the
+    test unable to fail: a review caught that it passed against the pre-fix code.
+    """
+    decoy = tmp_path / "web"
+    decoy.mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delattr(sys, "_MEIPASS", raising=False)
+
+    # Stand in for a source checkout that has not had the UI copied into the package yet,
+    # which is the only situation where the fallback below is reached at all.
+    package_web = Path(main.__file__).resolve().parent / "web"
+    real_exists = Path.exists
+    monkeypatch.setattr(
+        Path, "exists", lambda self: False if self == package_web else real_exists(self)
+    )
+
+    resolved = main._frontend_dist()
+    assert resolved.is_absolute(), f"{resolved} is relative"
+    assert resolved.resolve() != decoy.resolve(), (
+        "a web folder in the working directory was picked up as the frontend"
+    )
+
+
+def test_a_refused_setting_is_a_422_not_a_500():
+    client = TestClient(main.app, base_url="http://127.0.0.1:8765")
+    response = client.put("/api/settings", json={"claude_base_url": "http://attacker.example/"})
+    assert response.status_code == 422
+    assert "https" in response.json()["detail"].lower()
+
+
+def test_the_folder_walk_stops_at_the_limit(tmp_path):
+    """The cap used to be applied AFTER walking the whole tree, so the walk was the hang it
+    claimed to prevent. _list_folder now stops one past the limit."""
+    for i in range(main.MAX_BATCH_FILES + 50):
+        (tmp_path / f"f{i}.txt").write_text("x", encoding="utf-8")
+    found = main._list_folder(tmp_path, recursive=True)
+    assert len(found) == main.MAX_BATCH_FILES + 1, (
+        f"walked {len(found)} files instead of stopping at {main.MAX_BATCH_FILES + 1}"
+    )
+
+
+def test_the_folder_route_reports_the_limit_without_claiming_a_total(tmp_path):
+    for i in range(main.MAX_BATCH_FILES + 5):
+        (tmp_path / f"f{i}.txt").write_text("x", encoding="utf-8")
+    client = TestClient(main.app, base_url="http://127.0.0.1:8765")
+    response = client.post(
+        "/api/convert/folder", json={"path": str(tmp_path), "recursive": True, "options": {}}
+    )
+    assert response.status_code == 400
+    assert "more than" in response.json()["detail"]

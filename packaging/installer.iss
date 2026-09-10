@@ -1,6 +1,12 @@
 #define MyAppName "Omnivert"
+; The version is passed in, never guessed. This used to fall back to a hardcoded string
+; that went stale two releases running, and because the version names the output file, a
+; local build of 0.1.5 silently produced Omnivert-Setup-0.1.3.exe. CI always passes the
+; flag (release.yml), so this only ever fires for a hand-run compile, where being told is
+; better than being surprised. Pass it as:
+;   ISCC.exe /DMyAppVersion=x.y.z packaging\installer.iss
 #ifndef MyAppVersion
-#define MyAppVersion "0.1.3"
+  #error MyAppVersion is not defined. Pass /DMyAppVersion=x.y.z (see README, Packaging).
 #endif
 #define MyAppPublisher "Omnivert"
 #define MyAppExeName "Omnivert.exe"
