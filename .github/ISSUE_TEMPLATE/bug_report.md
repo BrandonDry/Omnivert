@@ -32,7 +32,7 @@ Paste any error message, warning callout, or relevant log output here.
 
 ## Environment
 
-- Omnivert version: <!-- Help/About, or the installer filename, e.g. Omnivert-Setup-<version>.exe -->
+- Omnivert version: <!-- shown in the Updates dialog, or read it off the installer filename, e.g. Omnivert-Setup-<version>.exe. The badge in the app header is the conversion engine's version, not this one. -->
 - Windows version: <!-- e.g. Windows 11 23H2 -->
 - Install type: <!-- installed Setup.exe / running from source -->
 - Capabilities dialog: <!-- any format marked "unavailable", or any dependency marked missing -->
