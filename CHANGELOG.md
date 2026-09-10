@@ -68,6 +68,20 @@ for the first time here. If you are on 0.1.3, this release carries both.
 
 ### Changed
 
+- **The download is smaller, and no longer carries the build tool that made it.** The frozen
+  executable embedded PyInstaller's own build modules, all of `pytest`, and the whole of
+  `pygments`: 447 modules of build-time tooling in a binary that never invokes a build tool.
+  They arrived through pywebview's own PyInstaller hook. Beyond the dead weight, PyInstaller
+  is GPL-2.0-or-later and its bootloader exception does not cover those modules, so an
+  Apache-2.0 binary was shipping GPL code with no licence text alongside it. The executable
+  drops from 33.6 MB to 30.6 MB.
+- **`THIRD_PARTY_NOTICES.md` is accurate now.** It claimed every bundled component was
+  permissively licensed. Four are not: certifi is MPL-2.0, the FLAC binaries used for audio
+  transcription are GPLv2, Eigen compiled into onnxruntime is MPL-2.0, and the WebView2
+  assemblies are proprietary Microsoft components (redistributable, but not open source).
+  Each is now named with what it actually requires, and the file says where to find licence
+  text in an install and which components ship without any. None of it affects your right to
+  use Omnivert, and none conflicts with its Apache-2.0 licence.
 - The Inno Setup script no longer defaults the version. It went stale two releases running,
   and because the version names the output file, a local build of 0.1.5 silently produced
   `Omnivert-Setup-0.1.3.exe`. A compile without `/DMyAppVersion` now fails and says so.
