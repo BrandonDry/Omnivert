@@ -13,6 +13,7 @@ import warnings
 from contextlib import contextmanager
 from typing import Any, Dict, List, Tuple
 
+import requests
 from markitdown import MarkItDown as Engine, StreamInfo
 
 from . import settings as settings_module
@@ -147,7 +148,11 @@ class ConversionService:
         return engine
 
     def _construct(self, cfg: Dict[str, Any], opts: ConvertOptions) -> Engine:
-        kwargs: Dict[str, Any] = {}
+        # Hand the engine a session that re-checks the URL guard on every redirect hop and
+        # times out. Left to itself the engine builds a plain requests.Session and calls
+        # ``session.get(uri, stream=True)`` on it, which follows redirects by default and
+        # waits forever, so the guard only ever saw the URL the user typed. See url_guard.
+        kwargs: Dict[str, Any] = {"requests_session": url_guard.guarded_session()}
 
         if cfg.get("exiftool_path"):
             kwargs["exiftool_path"] = cfg["exiftool_path"]
@@ -287,8 +292,7 @@ class ConversionService:
                 ok=False,
                 error=blocked,
                 error_kind="blocked_url",
-                remediation="Use a public http(s) URL. Local files, internal addresses, and "
-                "non-web schemes are blocked for safety.",
+                remediation=_BLOCKED_URL_REMEDIATION,
             )
 
         def run(md: Engine):
@@ -366,8 +370,39 @@ def _dedupe(items: List[str]) -> List[str]:
     return out
 
 
+_BLOCKED_URL_REMEDIATION = (
+    "Use a public http(s) URL. Local files, internal addresses, and non-web schemes are "
+    "blocked for safety."
+)
+
+
 def _classify(exc: Exception) -> Tuple[str, str]:
     """Return (error_kind, remediation) for a conversion exception."""
+    if isinstance(exc, url_guard.BlockedUrlError):
+        # A redirect hop, not the typed URL: the up-front check in convert_url passed and the
+        # server then pointed somewhere refused. Same error kind either way, so the UI has
+        # one message for "that URL is not fetchable" rather than two.
+        return ("blocked_url", _BLOCKED_URL_REMEDIATION)
+    # Both of these became reachable when the guarded session added a timeout and a redirect
+    # cap; before it there was neither, so a slow server hung instead of failing and a long
+    # chain was simply followed. Classified so the user gets a cause rather than "unexpected".
+    if isinstance(exc, requests.exceptions.Timeout):
+        return (
+            "fetch_timeout",
+            "That server did not respond in time. Check the URL, or try again later.",
+        )
+    if isinstance(exc, requests.exceptions.TooManyRedirects):
+        return (
+            "too_many_redirects",
+            f"That URL redirected more than {url_guard.MAX_REDIRECTS} times. It may be "
+            "misconfigured, or it may need a sign-in this app cannot perform.",
+        )
+    if isinstance(exc, requests.exceptions.InvalidSchema):
+        # A redirect to file:, data: or ftp:. requests has no adapter mounted for those, so
+        # nothing is fetched and this is already safe; it is classified only so it reads as
+        # a URL problem rather than "Unexpected error during conversion", which is what the
+        # other refused-hop cases above were added for.
+        return ("blocked_url", _BLOCKED_URL_REMEDIATION)
     if isinstance(exc, UnsupportedFormatException):
         return (
             "unsupported_format",

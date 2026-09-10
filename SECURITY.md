@@ -33,23 +33,50 @@ Omnivert runs locally on your machine. A few properties are worth understanding:
   backend also rejects any request whose `Host` header is not a loopback name, which stops a
   website from pointing its own hostname at `127.0.0.1` and then reading the API's responses
   as though they were its own.
-- **What that guard does not cover.** A page you visit can still address
-  `http://127.0.0.1:<port>` directly. The `Host` header is then a loopback name and the guard
-  allows it, as it must, because that is also how the app's own UI talks to the API. The API
-  has no authentication, so a cross-origin request the browser sends without a preflight (an
-  HTML form post, for example) is accepted and acted on. What limits the damage is that the
-  API returns no cross-origin allow header, so the page cannot read any response, and that
-  every JSON route requires a JSON `Content-Type`, which needs a preflight the API refuses.
-  In practice a hostile page could make Omnivert convert content it supplies, or open a file
-  picker, but it cannot read your files, your conversions, or your stored keys. Fully closing
-  this needs a per-session token shared between the bundled UI and the API.
+- **Cross-site requests are refused.** A page you visit can still address
+  `http://127.0.0.1:<port>` directly, and the `Host` header is then a loopback name the guard
+  above has to allow, because that is also how the app's own UI talks to the API. The backend
+  therefore also checks where the browser says the request came from: the `Sec-Fetch-Site` and
+  `Origin` headers must say this app's own window, or the request is refused with a 403 before
+  any route runs. Previously such a request was accepted and acted on: a form post from a
+  hostile page could make Omnivert convert content it supplied, with options that spent your
+  configured Claude or Azure credits, or pop a native file picker over your desktop.
+- **What that still does not cover.** Both headers are set by the browser, so the check is
+  only as good as the browser making the request. `Sec-Fetch-Site` arrived in Chromium 76
+  (2019), Firefox 90 (2021) and Safari 16.4 (2023). A client that sends neither header is
+  allowed through, because refusing it would break every non-browser client of a local API
+  that has no authentication at all, and because pywebview falls back to an older renderer
+  when the WebView2 runtime is missing. Every browser still in service sends `Origin` on
+  requests that change something, so what the allowance leaves open is a cross-site `GET`,
+  whose response the page still cannot read. Fully closing this needs a per-session token
+  shared between the bundled UI and the API.
+- **Development builds are more permissive.** A copy that is not the packaged Windows build
+  (a `pip install`, or running from source) additionally accepts requests from any origin on
+  loopback, so that the Vite dev server works whichever port it lands on. That means another
+  local web server on your machine could drive the API in that mode. The packaged installer
+  build does not do this: it accepts only its own window's origin.
 - **Local file access is intentional.** The folder/paths conversion endpoints read the files
   and folders you select (via the native picker or a typed path) so they can be converted to
   Markdown. Reading your own files is the app's purpose; the API does not write to arbitrary
   paths (saving goes through the native save dialog).
 - **URL conversion is restricted.** The URL converter accepts only `http`/`https` URLs and
   rejects other schemes (e.g. `file:`) and hosts that resolve to loopback, private, or
-  link-local address ranges, to avoid local-file and internal-network access.
+  link-local address ranges, to avoid local-file and internal-network access. The check is
+  re-applied to **every redirect hop**, not just the address you type, so a public URL cannot
+  bounce the fetch onto a local or internal one; chains are capped and every fetch has a
+  timeout.
+- **The URL check and HTTP proxies.** If your machine is configured with an `HTTP_PROXY` or
+  `HTTPS_PROXY`, Omnivert uses it, and the proxy then resolves hostnames instead of Omnivert.
+  Addresses written literally (`http://127.0.0.1/`, `http://10.0.0.5/`) are still refused,
+  because they need no lookup, but a **name** that your proxy resolves to an internal address
+  can get through. Ignoring a configured proxy would break the URL tab entirely on machines
+  that have no other route out, which we judged the worse outcome.
+- **Other limits of the URL check.** The response size is not capped, so an allowed URL can
+  still return a very large document. A host that resolves differently between the check and
+  the fetch (DNS rebinding) can still win that race. And the check refuses hosts by resolving
+  them, so it depends on the Windows resolver's refusal to resolve obfuscated forms such as
+  `http://2130706433/`; Omnivert is a Windows application and this reasoning does not carry
+  to other platforms.
 - **Request/output bounds.** Upload size and batch output size are capped to avoid
   exhausting memory.
 
@@ -69,6 +96,25 @@ Omnivert installers are currently **not code-signed**. This means:
   Note: a published checksum protects against **corruption and tampering in transit**, but
   it is not a substitute for a cryptographic signature, and it does not, on its own, prove
   authorship.
+
+**How the in-app updater uses that file.** When you apply an update, the app resolves the
+release asset itself; nothing in the request chooses what is downloaded. The asset must be a
+release of the repository **this build was made from**, not the one in Settings: the "update
+repository" setting can point the *check* anywhere, but installing is pinned, because a host
+check like "must be on github.com" says nothing about who published the release, and a
+release's `SHA256SUMS` is written by whoever published it. Its SHA-256 must then match that
+file, and a missing, unreadable, or non-matching checksum **stops the update** rather than
+being skipped.
+
+Be clear about what that does and does not prove. Together they establish that the bytes came
+from this project's own releases and arrived intact. They do **not** prove who published the
+release, because the checksum and the file come from the same place. That still needs a code
+signature.
+
+One narrower path remains: on a development or `pip`-installed copy (not the packaged
+Windows build), an update installs a release **wheel** by handing its URL to `pip`. That URL
+is pinned to the same repository and `pip` verifies TLS, but the wheel's checksum is not
+independently confirmed the way the installer's is.
 
 > **Planned follow-up:** Authenticode / Azure Trusted Signing of the installer and binaries.
 > This is the real fix for installer authenticity and SmartScreen reputation, and is tracked

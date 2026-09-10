@@ -95,6 +95,9 @@ export function checkAppUpdate(): Promise<AppUpdateInfo> {
   return getJson<AppUpdateInfo>("/api/app/updates/check")
 }
 
+// The server ignores download_url and resolves the release asset itself: letting the client
+// name what the backend downloads and runs was a hole, not a feature. The field is still sent
+// so older and newer builds of either side stay compatible.
 export function applyAppUpdate(downloadUrl?: string | null): Promise<UpdateStatus> {
   return sendJson<UpdateStatus>("/api/app/updates/apply", "POST", {
     download_url: downloadUrl ?? null,
