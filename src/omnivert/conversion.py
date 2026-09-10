@@ -1,4 +1,4 @@
-"""ConversionService — the single place that builds conversion engine instances and runs
+"""ConversionService: the single place that builds conversion engine instances and runs
 conversions, capturing warnings and mapping exceptions to friendly, structured errors.
 """
 

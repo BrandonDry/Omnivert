@@ -1,7 +1,7 @@
 """Generate Omnivert's production logo assets from the master glyph definition.
 
-The brand glyph is an original "converge arrow" mark — several inputs converging into a
-single rightward arrow — reflecting Omnivert's purpose of converting anything into one
+The brand glyph is an original "converge arrow" mark (several inputs converging into a
+single rightward arrow) reflecting Omnivert's purpose of converting anything into one
 Markdown output. ``frontend/public/favicon.svg`` is the hand-authored source of truth; this
 script reproduces the exact same mark as committed raster assets (web icons, the Windows
 ``.ico``, and the README/social lockups).
@@ -166,7 +166,7 @@ def _lockup(out: Path, *, size, bg, text_color, tagline_color) -> Path:
 def main() -> None:
     ASSETS.mkdir(exist_ok=True)
 
-    # 1. Windows app icon (.ico) — crisp at every size.
+    # 1. Windows app icon (.ico), crisp at every size.
     ico_sizes = [16, 24, 32, 48, 64, 128, 256]
     tile(256).save(
         PACKAGING / "omnivert.ico", sizes=[(s, s) for s in ico_sizes]

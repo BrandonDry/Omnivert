@@ -137,7 +137,7 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.value }}
           # Drafts are built automatically but only reach users when a maintainer clicks
-          # Publish — that click is the human approval gate for engine auto-bumps.
+          # Publish: that click is the human approval gate for engine auto-bumps.
           draft: true
           body_path: dist/release-notes.md
           # Appends GitHub's auto-generated commit/PR notes below the engine changelog.

@@ -71,7 +71,7 @@ def _checksums_asset(release: dict) -> Optional[str]:
 
 def _expected_sha256(filename: str) -> Optional[str]:
     """Best-effort lookup of ``filename``'s SHA-256 from the latest release's SHA256SUMS
-    asset (``<hex>  <filename>`` lines). Returns None if unavailable — verification is then
+    asset (``<hex>  <filename>`` lines). Returns None if unavailable, and verification is then
     skipped rather than blocking the update."""
     repo = _repo()
     if not repo:
@@ -200,7 +200,7 @@ def start_app_update(download_url: Optional[str]) -> Dict[str, object]:
             "Update it the way it was installed (e.g. git pull), or use a packaged release."
         )
     if _editable_install():
-        return _fail("You're on a development checkout — update with git instead of pip.")
+        return _fail("You're on a development checkout. Update with git instead of pip.")
 
     with _lock:
         _state.update(
@@ -260,7 +260,7 @@ def _run_install(download_url: str) -> None:
                     "message": (
                         "Update installed. Restart Omnivert to finish."
                         if ok
-                        else "Update failed — see details below."
+                        else "Update failed, see details below."
                     ),
                     "output": output[-8000:],
                     "new_version": _installed_dist_version() if ok else APP_VERSION,

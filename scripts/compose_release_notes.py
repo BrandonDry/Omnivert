@@ -1,7 +1,7 @@
 """Compose Omnivert release notes that surface the bundled conversion engine's changelog.
 
 Frozen users act on the *app* update prompt, so the app release notes must explain what the
-bundled engine actually changed — not just "Bundle conversion engine X". This reads the pinned
+bundled engine actually changed, not just "Bundle conversion engine X". This reads the pinned
 markitdown version from pyproject.toml, fetches that version's upstream release body from
 GitHub, and writes a Markdown notes file. The release workflow uses it as the release body and
 lets GitHub append the auto-generated commit notes below.
@@ -10,7 +10,7 @@ Standalone (stdlib only) so it can run at any point in the release job. Honors G
 avoid unauthenticated GitHub API rate limits on shared Actions runners.
 
 The microsoft/markitdown monorepo tags releases like ``markitdown-0.1.6`` (not ``v0.1.6``), so
-we match the version as a substring of the tag — same approach as
+we match the version as a substring of the tag, the same approach as
 ``omnivert.updates._github_notes``.
 
 Usage: python scripts/compose_release_notes.py [output_path]

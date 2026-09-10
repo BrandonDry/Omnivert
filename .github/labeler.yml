@@ -1,4 +1,4 @@
-# Configuration for actions/labeler — applies labels based on changed paths.
+# Configuration for actions/labeler: applies labels based on changed paths.
 # Pinned action is v4, so this uses the v4 glob-list syntax.
 # Docs: https://github.com/actions/labeler/tree/v4.3.0
 

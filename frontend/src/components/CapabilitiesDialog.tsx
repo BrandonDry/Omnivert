@@ -55,7 +55,7 @@ export function CapabilitiesDialog({
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
               <div>
                 <div className="text-xs text-muted-foreground">Engine</div>
-                <div className="font-medium">{caps.engine_version ?? "—"}</div>
+                <div className="font-medium">{caps.engine_version ?? "not reported"}</div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Python</div>

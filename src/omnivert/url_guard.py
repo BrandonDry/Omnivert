@@ -2,7 +2,7 @@
 
 The conversion engine's ``convert_uri`` accepts ``file://``, ``data:`` and ``http(s)://``.
 The URL input is user-facing, so we restrict it to public ``http(s)`` targets and refuse
-hosts that resolve to loopback / private / link-local / reserved ranges — cloud metadata
+hosts that resolve to loopback / private / link-local / reserved ranges: cloud metadata
 (169.254.169.254), LAN services, and the app's own files (``file:///…/settings.json``).
 
 This is best-effort, matched to a single-user desktop tool: DNS is resolved once here, so a

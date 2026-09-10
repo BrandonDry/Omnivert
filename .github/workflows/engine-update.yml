@@ -101,7 +101,7 @@ jobs:
 
             After merge this tags a release and builds a **draft** GitHub Release with the
             bundled MarkItDown changelog. Users are not prompted until a maintainer clicks
-            **Publish** on that draft — that publish is the human approval gate.
+            **Publish** on that draft, and that publish is the human approval gate.
 
       - name: Merge guarded PR and tag release
         if: steps.cpr.outputs.pull-request-number != ''

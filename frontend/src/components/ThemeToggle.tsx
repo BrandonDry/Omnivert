@@ -19,7 +19,7 @@ export function ThemeToggle() {
   function choose(value: Theme) {
     setTheme(value) // instant, local
     // Persist to the backend so the choice survives a reload (where the app
-    // re-applies the saved theme). Fire-and-forget — the UI already updated.
+    // re-applies the saved theme). Fire-and-forget: the UI already updated.
     void saveSettings({ theme: value }).catch(() => {})
   }
 

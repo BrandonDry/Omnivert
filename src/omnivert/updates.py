@@ -1,6 +1,6 @@
 """Check for and install conversion engine updates from PyPI.
 
-Omnivert pins the conversion engine to a curated set of extras — **never** ``[all]``, which can't
+Omnivert pins the conversion engine to a curated set of extras, **never** ``[all]``, which can't
 resolve on Python 3.14 (its ``youtube-transcript-api~=1.0.0`` pin has no 3.14 wheel).
 ``check_for_updates`` compares the installed version against the latest release on PyPI
 (the authoritative source for what pip would install) and attaches GitHub release notes
@@ -85,7 +85,7 @@ def _query_installed_version() -> Optional[str]:
 
 def _github_notes(version: str) -> Dict[str, Optional[str]]:
     """Find the GitHub release whose tag matches ``version``. microsoft/markitdown is a
-    monorepo, so tags look like ``markitdown-0.1.6`` rather than ``v0.1.6`` — match on a
+    monorepo, so tags look like ``markitdown-0.1.6`` rather than ``v0.1.6``, so match on a
     substring and fall back to just linking the releases page."""
     fallback = {"release_notes": None, "release_url": GITHUB_RELEASES_PAGE, "published_at": None}
     try:
@@ -222,7 +222,7 @@ def _run_install(version: Optional[str]) -> None:
                     "message": (
                         "Update installed. Restart Omnivert to finish."
                         if ok
-                        else "Update failed — see details below."
+                        else "Update failed, see details below."
                     ),
                     "output": output[-8000:],
                     "new_version": _query_installed_version() if ok else installed_version(),

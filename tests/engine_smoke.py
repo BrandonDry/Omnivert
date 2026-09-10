@@ -2,7 +2,7 @@
 
 This is the gate the automated engine-bump workflow relies on: if a new markitdown release
 breaks a real conversion path, this must fail in CI *before* a release is built. It therefore
-covers the binary office/PDF formats that are the engine's actual value — not just the trivial
+covers the binary office/PDF formats that are the engine's actual value, not just the trivial
 text formats.
 
 Fixtures are generated in-process rather than committed. That keeps the suite hermetic (no
@@ -98,7 +98,7 @@ def _docx_bytes() -> bytes:
 
 def _pdf_bytes() -> bytes:
     """A minimal one-page PDF with a single text run, assembled by hand (no PDF writer lib
-    ships with the engine's pdf extra — pdfminer only reads). Byte offsets feed a valid xref
+    ships with the engine's pdf extra, pdfminer only reads). Byte offsets feed a valid xref
     table so pdfminer can extract the text."""
     stream = b"BT /F1 24 Tf 72 720 Td (" + _SAMPLE.encode("ascii") + b") Tj ET"
     objects = [

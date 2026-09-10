@@ -25,7 +25,7 @@ def download_installer(download_url: str, expected_sha256: Optional[str] = None)
 
     If ``expected_sha256`` is given (from the release's SHA256SUMS asset), the download is
     verified before it is returned, and a mismatch raises. This catches a corrupted or
-    in-transit-tampered download; it does **not** establish publisher authenticity — that
+    in-transit-tampered download; it does **not** establish publisher authenticity, and that
     needs a signed installer (see SECURITY.md)."""
     if not download_url:
         raise ValueError("No installer URL provided.")

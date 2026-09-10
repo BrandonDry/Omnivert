@@ -1,7 +1,7 @@
 """Report whether PyPI has a newer *stable* conversion engine release than pyproject.toml pins.
 
 Uses PEP 440 parsing (``packaging.version``) so comparisons are correct and pre-releases are
-skipped — an auto-bump must never ship a markitdown alpha/beta to users. The latest stable is
+skipped: an auto-bump must never ship a markitdown alpha/beta to users. The latest stable is
 chosen from PyPI's full release list rather than ``info.version`` (which can point at a
 pre-release). Falls back to a digit-tuple compare only if ``packaging`` is somehow unavailable.
 """

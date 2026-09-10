@@ -98,7 +98,7 @@ def build_zip(results: List[ConversionResult]) -> bytes:
     listing warnings and any failures so nothing is silently dropped.
 
     Output is bounded: any single Markdown over ``_MAX_MD_BYTES`` is truncated, and once the
-    cumulative size passes ``_MAX_TOTAL_BYTES`` the rest are skipped — so pathological engine
+    cumulative size passes ``_MAX_TOTAL_BYTES`` the rest are skipped, so pathological engine
     output can't balloon memory. Both events are recorded in the report."""
     buf = io.BytesIO()
     used: set = set()
@@ -125,7 +125,7 @@ def _report(results: List[ConversionResult], notes: Optional[List[str]] = None) 
     failed = [r for r in results if not r.ok]
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     lines: List[str] = [
-        "Omnivert — batch conversion report",
+        "Omnivert batch conversion report",
         f"Generated: {stamp}",
         f"Total: {len(results)}   Succeeded: {len(ok)}   Failed: {len(failed)}",
         "",

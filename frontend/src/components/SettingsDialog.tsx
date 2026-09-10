@@ -156,7 +156,7 @@ export function SettingsDialog({ children, onSaved }: Props) {
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
             API keys are stored locally and never leave this machine. Secret fields show a
-            placeholder when a value is already saved — leave them blank to keep it.
+            placeholder when a value is already saved. Leave them blank to keep it.
           </DialogDescription>
         </DialogHeader>
 
@@ -356,7 +356,7 @@ export function SettingsDialog({ children, onSaved }: Props) {
               <SectionTitle>Updates</SectionTitle>
               <Field
                 label="App GitHub repository"
-                hint="owner/repo — where Omnivert's tagged releases are published. Leave blank to disable app update checks."
+                hint="owner/repo, where Omnivert's tagged releases are published. Leave blank to disable app update checks."
               >
                 <Input
                   placeholder="your-name/omnivert"
