@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from omnivert import settings as settings_module
 from omnivert.settings import REDACTED, SECRET_FIELDS
 
@@ -71,3 +73,94 @@ def test_file_types_round_trip_as_lists(isolated_settings):
     cfg = settings_module.load()
     assert cfg["docintel_file_types"] == [".pdf", "PNG"]
     assert cfg["cu_file_types"] == [".docx"]
+
+
+# --- the settings that are not merely configuration ---------------------------------
+#
+# exiftool_path becomes subprocess.run([it, "-ver"]) inside the engine, and the three
+# endpoints decide which server receives the matching API key. The API that writes them has
+# no authentication, so a request could turn either into something worse than a bad
+# conversion. Reproduced before these checks existed: writing exiftool_path and then
+# converting any image ran a batch file as the logged-in user.
+
+
+def test_exiftool_path_must_actually_be_exiftool(isolated_settings, tmp_path):
+    payload = tmp_path / "payload.exe"
+    payload.write_bytes(b"MZ")
+    with pytest.raises(settings_module.SettingsError) as exc:
+        settings_module.save({"exiftool_path": str(payload)})
+    assert "exiftool" in str(exc.value).lower()
+    assert settings_module.load()["exiftool_path"] == "", "the refused value was still stored"
+
+
+def test_a_real_exiftool_path_is_accepted(isolated_settings, tmp_path):
+    tool = tmp_path / "exiftool.exe"
+    tool.write_bytes(b"MZ")
+    settings_module.save({"exiftool_path": str(tool)})
+    assert settings_module.load()["exiftool_path"] == str(tool)
+
+
+def test_exiftool_path_may_not_live_on_a_network_share(isolated_settings):
+    with pytest.raises(settings_module.SettingsError) as exc:
+        settings_module.save({"exiftool_path": r"\\attacker\share\exiftool.exe"})
+    assert "network" in str(exc.value).lower()
+
+
+def test_a_missing_exiftool_is_refused_rather_than_stored(isolated_settings, tmp_path):
+    with pytest.raises(settings_module.SettingsError):
+        settings_module.save({"exiftool_path": str(tmp_path / "nope" / "exiftool.exe")})
+
+
+def test_clearing_exiftool_path_is_allowed(isolated_settings, tmp_path):
+    tool = tmp_path / "exiftool.exe"
+    tool.write_bytes(b"MZ")
+    settings_module.save({"exiftool_path": str(tool)})
+    settings_module.save({"exiftool_path": ""})
+    assert settings_module.load()["exiftool_path"] == ""
+
+
+@pytest.mark.parametrize("field", settings_module.ENDPOINT_FIELDS)
+def test_an_endpoint_may_not_be_plain_http_on_another_host(isolated_settings, field):
+    """This is the shape that exfiltrated a real key in review: repoint, then convert."""
+    with pytest.raises(settings_module.SettingsError) as exc:
+        settings_module.save({field: "http://attacker.example/v1/"})
+    assert "https" in str(exc.value).lower()
+
+
+@pytest.mark.parametrize("field", settings_module.ENDPOINT_FIELDS)
+def test_an_https_endpoint_is_accepted(isolated_settings, field):
+    settings_module.save({field: "https://example.invalid/v1/"})
+    assert settings_module.load()[field] == "https://example.invalid/v1/"
+
+
+def test_a_local_gateway_over_http_is_still_allowed(isolated_settings):
+    """Running LiteLLM or similar on this machine is a legitimate setup, and plain http to
+    loopback never leaves the box."""
+    settings_module.save({"claude_base_url": "http://127.0.0.1:4000/v1/"})
+    assert settings_module.load()["claude_base_url"] == "http://127.0.0.1:4000/v1/"
+
+
+def test_an_endpoint_may_not_carry_credentials(isolated_settings):
+    with pytest.raises(settings_module.SettingsError) as exc:
+        settings_module.save({"claude_base_url": "https://user:pw@example.invalid/v1/"})
+    assert "username" in str(exc.value).lower()
+
+
+def test_a_refused_value_leaves_every_other_field_untouched(isolated_settings):
+    settings_module.save({"theme": "dark"})
+    with pytest.raises(settings_module.SettingsError):
+        settings_module.save({"theme": "light", "claude_base_url": "ftp://example.invalid/"})
+    assert settings_module.load()["theme"] == "dark", "a partial write got through"
+
+
+def test_a_legacy_value_on_disk_still_loads(isolated_settings):
+    """``load`` must not reject: a settings file written before these checks existed has to
+    open, or the app is bricked for whoever wrote one. ``conversion._construct`` is what
+    refuses it at the point of use."""
+    isolated_settings.parent.mkdir(parents=True, exist_ok=True)
+    isolated_settings.write_text(
+        json.dumps({"exiftool_path": r"C:\evil\payload.exe", "theme": "dark"}), encoding="utf-8"
+    )
+    cfg = settings_module.load()
+    assert cfg["exiftool_path"] == r"C:\evil\payload.exe"
+    assert cfg["theme"] == "dark"

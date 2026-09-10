@@ -172,7 +172,10 @@ npm run build --prefix frontend
 python scripts\copy_web_assets.py
 python -m pip install -e ".[build]"
 pyinstaller packaging\app.spec --noconfirm --clean
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion="0.1.5" packaging\installer.iss
+
+# The installer version is required, not defaulted, so read it from the single source of truth
+$v = python -c "import pathlib, re; print(re.search('__version__ = .([^\"]+).', pathlib.Path('src/omnivert/app_version.py').read_text()).group(1))"
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion="$v" packaging\installer.iss
 ```
 
 The installer is written to `dist/installer/`. Release automation is documented in

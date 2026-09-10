@@ -23,8 +23,13 @@ PACKAGE_DIR = Path(__file__).resolve().parent
 APP_DIR = PACKAGE_DIR.parents[1]
 FRONTEND_DIST = PACKAGE_DIR / "web"
 if not FRONTEND_DIST.exists():
-    frozen_web = Path(getattr(sys, "_MEIPASS", "")) / "web"
-    FRONTEND_DIST = frozen_web if frozen_web.exists() else APP_DIR / "frontend" / "dist"
+    # Guarded on _MEIPASS actually being set: see the note in main._frontend_dist. An unset
+    # one makes this a relative path resolved against the working directory.
+    _meipass = getattr(sys, "_MEIPASS", "")
+    _frozen_web = Path(_meipass) / "web" if _meipass else None
+    FRONTEND_DIST = (
+        _frozen_web if _frozen_web and _frozen_web.exists() else APP_DIR / "frontend" / "dist"
+    )
 
 WINDOW_TITLE = "Omnivert"
 

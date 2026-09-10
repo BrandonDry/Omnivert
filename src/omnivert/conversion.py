@@ -154,14 +154,31 @@ class ConversionService:
         # waits forever, so the guard only ever saw the URL the user typed. See url_guard.
         kwargs: Dict[str, Any] = {"requests_session": url_guard.guarded_session()}
 
+        # Re-check the two settings that decide what runs and where a key goes, rather than
+        # trusting that whatever wrote settings.json checked them. ``settings.save`` validates
+        # on write, but a file written by an older build predates that, and this is the last
+        # point before the value becomes a subprocess or an Authorization header. A refusal
+        # here is a RuntimeError, which ``_run_capturing`` reports as a configuration error
+        # with the message below, so the user is told which setting to fix.
         if cfg.get("exiftool_path"):
-            kwargs["exiftool_path"] = cfg["exiftool_path"]
+            try:
+                kwargs["exiftool_path"] = settings_module.validate_exiftool_path(
+                    cfg["exiftool_path"]
+                )
+            except settings_module.SettingsError as exc:
+                raise RuntimeError(f"The saved ExifTool path was refused: {exc}") from exc
         if cfg.get("style_map"):
             kwargs["style_map"] = cfg["style_map"]
 
         # Claude image captioning
         if opts.describe_images:
-            client = build_llm_client(cfg.get("claude_api_key", ""), cfg.get("claude_base_url"))
+            try:
+                base_url = settings_module.validate_endpoint(
+                    "claude_base_url", cfg.get("claude_base_url")
+                )
+            except settings_module.SettingsError as exc:
+                raise RuntimeError(f"The saved Claude base URL was refused: {exc}") from exc
+            client = build_llm_client(cfg.get("claude_api_key", ""), base_url or None)
             kwargs["llm_client"] = client
             kwargs["llm_model"] = cfg.get("claude_model") or settings_module.DEFAULT_CLAUDE_MODEL
             if cfg.get("llm_prompt"):

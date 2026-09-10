@@ -12,6 +12,7 @@ import os
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict
+from urllib.parse import urlparse
 
 from .build_info import DEFAULT_APP_REPO
 
@@ -55,6 +56,100 @@ DEFAULTS: Dict[str, Any] = {
 SECRET_FIELDS = ("docintel_key", "cu_key", "claude_api_key")
 REDACTED = "__REDACTED__"
 
+# --- the settings that are not merely configuration ----------------------------------
+#
+# Most of DEFAULTS is inert: a bad value produces a bad conversion. Four are not, because
+# they decide what code runs and where a key goes, and the API that writes them has no
+# authentication:
+#
+#   exiftool_path  is handed to the engine, which calls subprocess.run([it, "-ver"]). A
+#                  request could name any program and the next image conversion ran it.
+#                  Demonstrated with a batch file that wrote a marker as the logged-in user.
+#   claude_base_url, docintel_endpoint, cu_endpoint  decide which server receives the
+#                  matching API key. Redacting secrets on read does not help: repointing the
+#                  URL makes the app hand the real key over on the next conversion.
+#
+# What the checks below buy, stated exactly. exiftool must now be a real local file actually
+# named exiftool, so an attacker cannot simply name a payload, and a UNC path is refused so
+# the binary cannot live on someone else's share. Endpoints must be https, or http only on
+# loopback for a local gateway, so a key can no longer be sent in plaintext to an arbitrary
+# host. What they do NOT buy: someone who can write settings can still point an endpoint at
+# an https host they control, and could still plant a file named exiftool.exe somewhere
+# writable. Narrowing is not closing. The per-session token in SECURITY.md is the fix, and
+# these checks are what is worth doing without rewriting the trust model.
+
+_EXIFTOOL_NAMES = {"exiftool", "exiftool.exe"}
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+ENDPOINT_FIELDS = ("claude_base_url", "docintel_endpoint", "cu_endpoint")
+
+
+class SettingsError(ValueError):
+    """A settings value the app refuses to store. Surfaced to the caller as a 422."""
+
+
+def validate_exiftool_path(value: Any) -> str:
+    """Return a usable ``exiftool_path``, or raise ``SettingsError``. Empty means unset."""
+    text = str(value or "").strip().strip('"')
+    if not text:
+        return ""
+    path = Path(text)
+    if text.startswith("\\\\") or text.startswith("//"):
+        raise SettingsError(
+            "The ExifTool path cannot be a network (UNC) path. Point it at a copy of "
+            "ExifTool on this machine."
+        )
+    if not path.is_absolute():
+        raise SettingsError("The ExifTool path must be a full path, for example C:\\Tools\\exiftool.exe.")
+    if path.name.lower() not in _EXIFTOOL_NAMES:
+        raise SettingsError(
+            "That is not ExifTool. The path must end in exiftool.exe, because Omnivert runs "
+            "this file as a program when it reads image metadata."
+        )
+    if not path.is_file():
+        raise SettingsError(f"No file at {text}. Check the path, or leave it blank to skip ExifTool.")
+    return text
+
+
+def validate_endpoint(field: str, value: Any) -> str:
+    """Return a usable endpoint URL, or raise ``SettingsError``. Empty means unset."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = urlparse(text)
+    except ValueError as exc:
+        raise SettingsError(f"{field} is not a valid URL.") from exc
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise SettingsError(f"{field} needs a full URL including the host, for example https://example.com/v1/.")
+    if "@" in parsed.netloc:
+        raise SettingsError(f"{field} must not contain a username or password.")
+    if parsed.scheme == "https":
+        return text
+    if parsed.scheme == "http" and host in _LOOPBACK_HOSTS:
+        return text  # a gateway running on this machine
+    raise SettingsError(
+        f"{field} must be an https URL. Plain http is only accepted on this machine "
+        "(localhost), because this address is where your API key is sent."
+    )
+
+
+def validate(incoming: Dict[str, Any]) -> Dict[str, Any]:
+    """Return ``incoming`` with the non-inert fields checked. Raises ``SettingsError``.
+
+    Applied on write rather than on read: ``load`` must keep returning whatever is on disk so
+    a settings file written by an older build still opens. ``conversion._construct`` re-checks
+    at the point of use, so a legacy value stored before these checks existed is refused there
+    instead of being handed to the engine.
+    """
+    checked = dict(incoming)
+    if "exiftool_path" in checked:
+        checked["exiftool_path"] = validate_exiftool_path(checked["exiftool_path"])
+    for field in ENDPOINT_FIELDS:
+        if field in checked:
+            checked[field] = validate_endpoint(field, checked[field])
+    return checked
+
 
 def settings_path() -> Path:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
@@ -85,6 +180,7 @@ def save(incoming: Dict[str, Any]) -> Dict[str, Any]:
     is the redaction sentinel (or empty) are left at their current stored value so the
     UI can submit redacted values back without wiping the real key."""
     current = load()
+    incoming = validate(incoming)
     for key, value in incoming.items():
         if key not in DEFAULTS:
             continue
