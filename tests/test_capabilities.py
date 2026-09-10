@@ -91,3 +91,43 @@ def test_no_youtube_capability_is_advertised():
     assert not hasattr(caps, "youtube_available")
     blob = " ".join(f.label + " " + (f.note or "") for f in caps.formats).lower()
     assert "youtube" not in blob
+
+
+# --- what must NOT be frozen into the shipped executable ------------------------------
+#
+# The 0.1.5 build embedded 23 PyInstaller build-tool modules, all of pytest and _pytest, and
+# ~340 pygments modules, pulled in because collect_submodules("webview") reaches pywebview's
+# own PyInstaller hook package, which imports PyInstaller.utils.hooks. PyInstaller is
+# GPL-2.0-or-later and its Bootloader Exception covers only the bootloader and loader, so
+# shipping the rest inside an Apache-2.0 binary is a licence conflict, not untidiness. None of
+# it runs either: a frozen app never invokes its own build tool.
+
+_MUST_NOT_SHIP = {"PyInstaller", "pytest", "_pytest", "pygments", "altgraph", "pefile"}
+
+
+def _spec_excludes() -> list[str]:
+    text = SPEC_PATH.read_text(encoding="utf-8")
+    match = re.search(r"_BUILD_ONLY = (\[.*?\])", text, re.DOTALL)
+    assert match, "app.spec no longer defines _BUILD_ONLY"
+    return list(ast.literal_eval(match.group(1)))
+
+
+def test_build_tooling_is_excluded_from_the_freeze():
+    missing = _MUST_NOT_SHIP - set(_spec_excludes())
+    assert not missing, (
+        f"app.spec no longer excludes {sorted(missing)} from the frozen build. "
+        "See the note above _BUILD_ONLY: these get pulled in through pywebview's "
+        "PyInstaller hook and must not reach the shipped executable."
+    )
+
+
+def test_the_excludes_are_wired_into_analysis():
+    """A list defined and not passed to Analysis excludes nothing."""
+    text = SPEC_PATH.read_text(encoding="utf-8")
+    assert "excludes=_BUILD_ONLY" in text, "_BUILD_ONLY is defined but not passed to Analysis"
+
+
+def test_pywebviews_own_server_is_not_excluded():
+    """bottle is pywebview's real HTTP server, not build tooling. Excluding it would break
+    the desktop window in a way no unit test here would catch."""
+    assert "bottle" not in _spec_excludes()

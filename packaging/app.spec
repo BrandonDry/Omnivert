@@ -165,6 +165,30 @@ for package in (
 ):
     hiddenimports += safe_collect_submodules(package)
 
+# Build-time tooling that must not end up inside the shipped executable.
+#
+# It was ending up there. Measured on the 0.1.5 build: the PYZ carried 23 ``PyInstaller.*``
+# modules, the whole of ``pytest`` and ``_pytest``, ~340 ``pygments`` modules, plus altgraph
+# and pefile. The route in is ``collect_submodules("webview")``, which picks up pywebview's
+# own ``webview.__pyinstaller`` hook package; that hook imports ``PyInstaller.utils.hooks``,
+# and the analyser follows it into the build tool and everything the build tool imports.
+#
+# It matters for two reasons. PyInstaller is GPL-2.0-or-later, and its Bootloader Exception
+# covers only ``bootloader/`` and ``PyInstaller/loader`` (with a separate MIT carve-out for
+# ``PyInstaller/isolated``), so shipping the rest inside an Apache-2.0 binary is a licence
+# conflict rather than an untidiness. And none of it runs: a frozen app never invokes its own
+# build tool, so this is pure weight in every download.
+#
+# Keep ``bottle``: that one is not tooling, it is pywebview's real HTTP server.
+_BUILD_ONLY = [
+    "PyInstaller",
+    "altgraph",
+    "pefile",
+    "pytest",
+    "_pytest",
+    "pygments",
+]
+
 a = Analysis(
     [str(ROOT / "packaging" / "freeze_entry.py")],
     pathex=[str(SRC)],
@@ -174,7 +198,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=_BUILD_ONLY,
     noarchive=False,
 )
 pyz = PYZ(a.pure)
