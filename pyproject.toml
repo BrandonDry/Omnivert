@@ -37,7 +37,11 @@ classifiers = [
   "Topic :: Utilities",
 ]
 dependencies = [
-  "fastapi",
+  # >=0.132 for the strict_content_type default: below it a request body with NO
+  # Content-Type is parsed as JSON, and a browser can send that cross-origin without a CORS
+  # preflight, which makes every JSON route a CSRF target. The requirement was previously
+  # unbounded, so an environment already holding an older FastAPI stayed vulnerable.
+  "fastapi>=0.132",
   "uvicorn[standard]",
   "python-multipart",
   "trio",

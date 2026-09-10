@@ -115,3 +115,31 @@ def test_lru_cap_evicts_oldest_batches():
     ids = [jobs.register([_ok(f"{i}.txt")]) for i in range(jobs._MAX_BATCHES + 5)]
     assert jobs.get(ids[0]) is None, "oldest batch should have been evicted"
     assert jobs.get(ids[-1]) is not None
+
+
+# --- header injection -----------------------------------------------------------------
+
+def test_crlf_in_a_document_title_cannot_reach_the_response_header():
+    """A converted document's <title> becomes the download filename.
+
+    HTML titles come from whatever was converted rather than from the user, and a raw CRLF
+    in one was landing verbatim in the Content-Disposition header uvicorn writes out.
+    """
+    header = jobs.content_disposition(jobs._md_arcname("rep\r\nX-Injected: yes"))
+    assert "\r" not in header
+    assert "\n" not in header
+
+
+def test_content_disposition_strips_controls_itself():
+    """Not every caller goes through _md_arcname, so the header builder defends itself."""
+    header = jobs.content_disposition("a\r\nb\tc\x00d.md")
+    for bad in ("\r", "\n", "\t", "\x00"):
+        assert bad not in header
+    header.encode("latin-1")
+
+
+def test_control_characters_are_stripped_from_archive_names():
+    data = jobs.build_zip([_ok("we\r\nird.txt")])
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        names = [n for n in zf.namelist() if n != "_conversion-report.txt"]
+    assert names and all("\r" not in n and "\n" not in n for n in names)

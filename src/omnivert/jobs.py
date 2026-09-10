@@ -33,7 +33,11 @@ _BATCHES: "OrderedDict[str, List[ConversionResult]]" = OrderedDict()
 # registered concurrently. Guard the store so the OrderedDict can't be corrupted.
 _LOCK = threading.Lock()
 
-_UNSAFE = re.compile(r'[\\/:*?"<>|]+')
+# Besides the Windows-illegal characters, C0 controls and DEL are stripped: a CR or LF
+# that reached ``content_disposition`` below would be written straight into a response
+# header, and the source of these names is a converted document's own <title>, which is
+# supplied by whatever was converted rather than by the user.
+_UNSAFE = re.compile(r'[\\/:*?"<>|\x00-\x1f\x7f]+')
 _TRAILING_EXT = re.compile(r"\.[^./\\]+$")
 
 
@@ -162,6 +166,10 @@ def content_disposition(filename: str) -> str:
     ascii_fallback = (
         filename.encode("ascii", "replace").decode("ascii").replace("?", "_").replace('"', "_")
     )
+    # Defence in depth: callers normally pass a name that already went through _md_arcname,
+    # but this function is what actually builds a raw header value, so it strips controls
+    # itself rather than trusting every present and future caller to have done it.
+    ascii_fallback = "".join(c if 0x20 <= ord(c) < 0x7F else "_" for c in ascii_fallback)
     if not ascii_fallback.strip("_ "):
         ascii_fallback = "download"
     encoded = quote(filename, safe="")

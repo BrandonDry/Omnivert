@@ -65,6 +65,10 @@ def test_url_with_scheme_but_no_host_is_refused():
         ("http://0.0.0.0/", "unspecified"),
         ("http://[::1]/", "IPv6 loopback"),
         ("http://[::ffff:127.0.0.1]/", "IPv4-mapped IPv6 loopback"),
+        ("http://100.64.0.1/", "carrier-grade NAT, RFC 6598"),
+        ("http://100.127.255.254/", "carrier-grade NAT, upper end"),
+        ("http://224.0.0.1/", "multicast"),
+        ("http://198.18.0.1/", "benchmarking range"),
     ],
 )
 def test_non_public_addresses_are_refused(url, why):
@@ -143,3 +147,30 @@ def test_numeric_host_forms_are_not_a_working_bypass(url):
     non-issue or, worse, "fix" the resolver in a way that turns these into a live bypass.
     """
     assert blocked_reason(url) is None
+
+
+# --- malformed input returns a reason rather than exploding ---------------------------
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://example.com:99999/",   # port out of range -> ValueError from .port
+        "http://example.com:abc/",     # non-numeric port  -> ValueError from .port
+        "http://[::1",                 # unclosed bracket  -> ValueError from urlparse
+        "http://" + "a" * 70 + ".com/",  # over-long label -> UnicodeError from idna
+    ],
+)
+def test_malformed_urls_return_a_reason_instead_of_raising(url):
+    """These four used to escape as exceptions, which FastAPI turned into a 500.
+
+    Every other conversion failure comes back as a structured ConversionResult, so a
+    mistyped URL producing a stack trace broke that contract.
+    """
+    reason = blocked_reason(url)
+    assert reason is not None
+    assert "malformed" in reason.lower()
+
+
+def test_public_multicast_is_still_blocked():
+    """is_global can report True for multicast, so it is named separately in the guard."""
+    assert blocked_reason("http://224.0.0.1/") is not None

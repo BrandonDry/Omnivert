@@ -25,20 +25,27 @@ def _ip_is_blocked(ip: str) -> bool:
         addr = ipaddress.ip_address(ip)
     except ValueError:
         return False
-    return (
-        addr.is_private
-        or addr.is_loopback
-        or addr.is_link_local
-        or addr.is_reserved
-        or addr.is_multicast
-        or addr.is_unspecified
-    )
+    # ``is_global`` is the broad test and is the one to trust: it already excludes private,
+    # loopback, link-local, reserved, unspecified AND carrier-grade NAT (100.64.0.0/10),
+    # which the previous hand-listed properties missed. Multicast still has to be named
+    # separately because some Python versions report a multicast address as global.
+    return not addr.is_global or addr.is_multicast
+
+
+_MALFORMED = "That URL is malformed and cannot be fetched."
 
 
 def blocked_reason(url: str) -> Optional[str]:
     """Return a human-readable reason the URL must not be fetched, or ``None`` if allowed."""
-    parsed = urlparse((url or "").strip())
-    scheme = (parsed.scheme or "").lower()
+    # urlparse and .port both raise on inputs a user can easily type: an unclosed IPv6
+    # bracket ("http://[::1"), a port that is not a number or is out of range
+    # ("http://x:99999/"). Those escaped as a 500 instead of the structured error every
+    # other conversion failure returns, so parsing is guarded end to end.
+    try:
+        parsed = urlparse((url or "").strip())
+        scheme = (parsed.scheme or "").lower()
+    except ValueError:
+        return _MALFORMED
     if scheme not in _ALLOWED_SCHEMES:
         shown = scheme or "no scheme"
         return (
@@ -50,12 +57,23 @@ def blocked_reason(url: str) -> Optional[str]:
     if not host:
         return "That URL has no host."
 
-    port = parsed.port or (443 if scheme == "https" else 80)
+    try:
+        port = parsed.port or (443 if scheme == "https" else 80)
+    except ValueError:
+        return _MALFORMED
+
     try:
         infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
     except socket.gaierror:
-        # Unknown host — let the engine surface its normal "couldn't fetch" error.
+        # Unknown host: let the engine surface its normal "couldn't fetch" error. This is a
+        # deliberate fail-open, and it is only safe while the engine resolves through the
+        # same getaddrinfo we just used. See test_url_guard.py for the reasoning, and note
+        # it does NOT hold when an HTTP proxy is configured, because the proxy resolves the
+        # name instead of this process.
         return None
+    except (UnicodeError, ValueError):
+        # An over-long or otherwise un-encodable hostname trips the idna codec.
+        return _MALFORMED
 
     for info in infos:
         ip = info[4][0]
