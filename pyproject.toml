@@ -47,7 +47,7 @@ dependencies = [
   "python-multipart",
   "trio",
   "pywebview",
-  "markitdown[pptx,docx,xlsx,xls,pdf,outlook,az-doc-intel,az-content-understanding,audio-transcription]==0.1.7",
+  "markitdown[pptx,docx,xlsx,xls,pdf,outlook,az-doc-intel,az-content-understanding,audio-transcription]==0.1.8",
   # Image captioning builds an OpenAI-compatible client pointed at Anthropic (claude_shim.py).
   # This is OUR direct dependency: markitdown 0.1.7 does not pull openai in under any extra
   # (not even [all]). It only calls `client.chat.completions.create` on a client we hand it.
